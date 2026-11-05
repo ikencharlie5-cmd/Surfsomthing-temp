@@ -302,7 +302,10 @@ export class Game {
     if (this.env.floorY != null) this.r.setFloorY(lp.p[1] - lp.height + this.env.floorY);
     const splashed = this.map.waterY != null && p.pos.y - 36 < this.map.waterY;
     const floorDrop = this.map.groundDrop ?? 1500; // e.g. Vapor Coast's sand sits closer
-    if (splashed || p.pos.y - 36 < lp.p[1] - lp.height - floorDrop || p.pos.y < this.mapMinY - 2000) {
+    // compare against the lower end of the current segment (long jumps drop a lot)
+    const ln = this.line[Math.min(idx + 1, this.line.length - 1)];
+    const refY = Math.min(lp.p[1], ln.p[1]);
+    if (splashed || p.pos.y - 36 < refY - lp.height - floorDrop || p.pos.y < this.mapMinY - 2000) {
       // fell: back to the start, run restarts
       this.restart();
       if (!this.demo) { this.audio.play('reset'); this.ev.onReset?.(); }

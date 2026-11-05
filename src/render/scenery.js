@@ -245,6 +245,7 @@ export function buildTheme(map, quality = 'high') {
   if (t.type === 'jungle') return buildJungle(map, t, density);
   if (t.type === 'volcano') return buildVolcano(map, t, density);
   if (t.type === 'vortex') return buildVortex(map, t, density);
+  if (t.type === 'castle') return buildCastle(map, t, density);
   return null;
 }
 
@@ -482,7 +483,7 @@ function buildBeach(map, t, density) {
     geo.blob(p, 260, [0.3, 0.17, 0.25], 0, rng, 0.5);
     if (rng() < 0.5) palm(geo, add(p, [0, 80, 0]), 500 + rng() * 300, rng, leafCols[Math.floor(rng() * 3)]);
   }
-  const af = fr[Math.floor(fr.length * 0.55)];
+  const af = fr[Math.floor(fr.length * (0.3 + rng() * 0.5))];
   const ac = at(af, shore(af) + 6000, seaY - 100);
   for (let k = 0; k < 16; k++) {
     const a0 = (k / 16) * Math.PI, a1 = ((k + 1) / 16) * Math.PI;
@@ -1380,7 +1381,7 @@ function buildJungle(map, t, density) {
     else geo.blob(add(base, [0, 30, 0]), 25 + rng() * 25, [[1, 0.3, 0.8], [0.3, 0.9, 1], [1, 0.8, 0.2]][Math.floor(rng() * 3)], 0.9, rng);
   }
   // the temple: a stepped pyramid with glowing runes and torches
-  const tf = fr[Math.floor(fr.length * 0.45)];
+  const tf = fr[Math.floor(fr.length * (0.25 + rng() * 0.5))];
   const tl = -(W(tf) + 5200);
   const tb = at(tf, tl, profileY(prof(tf), tl) - 50);
   const yaw = Math.atan2(tf.f[0], tf.f[2]);
@@ -1414,7 +1415,7 @@ function buildJungle(map, t, density) {
     }
   }
   // a waterfall pouring off the hills into a pool
-  const wf = fr[Math.floor(fr.length * 0.3)];
+  const wf = fr[Math.floor(fr.length * (0.15 + rng() * 0.6))];
   const wl = W(wf) + 4200, wtop = profileY(prof(wf), wl) + 2600, wbot = profileY(prof(wf), wl) - 60;
   for (let k = 0; k < 18; k++) geo.blob(at(wf, wl + 700 + rng() * 900, wbot + rng() * (wtop - wbot)), 450 + rng() * 300, [0.08, 0.12, 0.09], 0, rng, 0.8);
   const fallPos = [], fallFlow = [];
@@ -1647,4 +1648,205 @@ function buildVortex(map, t, density) {
   finish(group, geo, mat);
   finishLights(group, lights);
   return group;
+}
+
+// ----------------------------------------------------------------- castle
+
+const STONE_A = [0.34, 0.34, 0.38];
+const STONE_B = [0.26, 0.26, 0.3];
+const ROOF = [0.16, 0.12, 0.22];
+const GLASS = [[1.0, 0.3, 0.3], [0.3, 0.5, 1.0], [1.0, 0.8, 0.3], [0.5, 1.0, 0.5], [0.8, 0.4, 1.0]];
+
+function buildCastle(map, t, density) {
+  const group = new THREE.Group();
+  const geo = new Geo();
+  const lights = new Lights();
+  const rng = rand(t.seed || 71);
+  const line = map.line;
+  const fr = extendFrames(frames(line, 320), 5000, 9000, 320);
+  const drop = t.groundDrop ?? 900;
+  const W = (f) => f.e.width;
+  const G = (f) => f.p[1] - f.e.height - drop;
+  const WALL = (f) => W(f) + 2600; // curtain walls this far either side
+  const wallTop = (f) => G(f) + 2300;
+  const stone = (p) => mix(STONE_B, STONE_A, fbm3(p[0] / 300, p[1] / 200, p[2] / 300, 2));
+
+  // ground: paved courtyard between the walls, moat outside, dark hills beyond
+  const prof = (f) => {
+    const g = G(f), L = WALL(f);
+    return [[-(L + 14000), g + 2600], [-(L + 5000), g + 600], [-(L + 1300), g + 30], [-(L + 900), g - 260], [-(L + 350), g - 260], [-(L + 200), g],
+      [0, g], [L + 200, g], [L + 350, g - 260], [L + 900, g - 260], [L + 1300, g + 30], [L + 5000, g + 600], [L + 14000, g + 2600]];
+  };
+  strip(geo, fr, (f) => prof(f).map(([l, y]) => [l, y, 0, 1]), {
+    displace: (p, j, n) => (j <= 1 || j >= n - 2 ? (fbm3(p[0] / 3000, 0, p[2] / 3000, 3) - 0.4) * 1600 : 0),
+    color: (p, j, f) => {
+      const n = 13;
+      if (j <= 2 || j >= n - 3) return mix([0.04, 0.07, 0.05], [0.07, 0.1, 0.07], fbm3(p[0] / 1500, 0, p[2] / 1500));
+      if (j === 3 || j === 4 || j === n - 5 || j === n - 4) return [0.05, 0.05, 0.08];
+      // flagstones
+      const k = (Math.floor(p[0] / 220) + Math.floor(p[2] / 220)) & 1;
+      return k ? [0.2, 0.2, 0.23] : [0.17, 0.17, 0.2];
+    },
+  });
+  // moat water
+  const moatMat = waterMaterial([0.0, 0.02, 0.06], [0.2, 0.35, 0.8]);
+  for (const s of [-1, 1]) {
+    const m = flowStrip(fr, (f) => s * (WALL(f) + (s < 0 ? 900 : 350)), (f) => s * (WALL(f) + (s < 0 ? 350 : 900)), (f) => G(f) - 200, moatMat);
+    group.add(m);
+  }
+
+  // curtain walls with crenellations, a wall walk and torches
+  for (let i = 0; i < fr.length - 1; i++) {
+    const a = fr[i], b = fr[i + 1];
+    for (const s of [-1, 1]) {
+      const la = s * WALL(a), lb = s * WALL(b);
+      const ga = G(a), gb = G(b), ta = wallTop(a), tb = wallTop(b);
+      const inA = s * -1 * 0, thick = 220;
+      geo.quad(at(a, la, ga), at(b, lb, gb), at(b, lb, tb), at(a, la, ta), stone(at(a, la, ga)));
+      geo.quad(at(a, la + s * thick, ga), at(a, la + s * thick, ta), at(b, lb + s * thick, tb), at(b, lb + s * thick, gb), STONE_B);
+      geo.quad(at(a, la, ta), at(b, lb, tb), at(b, lb + s * thick, tb), at(a, la + s * thick, ta), [0.22, 0.22, 0.25]);
+      // merlons
+      for (let k = 0; k < 2; k++) {
+        const u = (k + 0.25) / 2;
+        const p = mix(at(a, la, ta), at(b, lb, tb), u);
+        geo.box(add(add(p, scale(a.r, s * thick * 0.5)), [0, 90, 0]), [thick, 180, 130], Math.atan2(a.f[0], a.f[2]), STONE_A);
+      }
+      if (i % 4 === 0) {
+        const p = at(a, la - s * 30, (ga + ta) * 0.5 + 300);
+        geo.cyl(p, add(p, [0, 140, 0]), 14, 22, 5, [0.2, 0.12, 0.08]);
+        lights.dot(add(p, [0, 190, 0]), [1.0, 0.55, 0.15], 110, 7 + rng() * 5, rng());
+        lights.dot(add(p, [0, 190, 0]), [1.0, 0.35, 0.05], 160, 0, 0);
+      }
+      if (i % 3 === 1 && rng() < 0.6) {
+        // arrow-slit windows glowing from inside
+        const p = at(a, la - s * 4, ga + 900 + rng() * 700);
+        geo.box(p, [20, 160, 50], Math.atan2(a.r[0], a.r[2]), [1.0, 0.6, 0.25], 0.9);
+      }
+    }
+  }
+
+  // round towers with conical roofs, banners and stained glass
+  for (let i = 6; i < fr.length; i += Math.max(6, Math.round(12 / density))) {
+    const f = fr[i];
+    for (const s of [-1, 1]) {
+      if (rng() < 0.2) continue;
+      const base = at(f, s * (WALL(f) + 120), G(f) - 200);
+      const h = wallTop(f) - G(f) + 900 + rng() * 1400;
+      const r = 380 + rng() * 160;
+      tower(geo, lights, base, h, r, rng, f, s);
+    }
+  }
+
+  // stone bridges spanning the courtyard high above the ride
+  for (let i = 10; i < fr.length - 10; i += Math.round(28 / Math.max(0.6, density))) {
+    if (rng() < 0.3) continue;
+    const f = fr[i];
+    const y = wallTop(f) + 300;
+    const L = WALL(f);
+    const steps = 16;
+    for (let k = 0; k < steps; k++) {
+      const u0 = k / steps, u1 = (k + 1) / steps;
+      const y0 = y + Math.sin(u0 * Math.PI) * 600, y1 = y + Math.sin(u1 * Math.PI) * 600;
+      const p0 = at(f, -L + 2 * L * u0, y0), p1 = at(f, -L + 2 * L * u1, y1);
+      const d = scale(f.f, 260);
+      geo.quad(sub(p0, d), sub(p1, d), add(p1, d), add(p0, d), STONE_A);
+      geo.quad(sub(add(p0, [0, -260, 0]), d), add(add(p0, [0, -260, 0]), d), add(add(p1, [0, -260, 0]), d), sub(add(p1, [0, -260, 0]), d), STONE_B);
+      geo.quad(sub(p0, d), sub(add(p0, [0, -260, 0]), d), sub(add(p1, [0, -260, 0]), d), sub(p1, d), stone(p0));
+      geo.quad(add(p0, d), add(p1, d), add(add(p1, [0, -260, 0]), d), add(add(p0, [0, -260, 0]), d), stone(p0));
+    }
+    lights.dot(at(f, 0, y + 650), [1.0, 0.55, 0.2], 140, 8, rng());
+  }
+
+  // the keep: a hero building outside the walls
+  const kf = fr[Math.floor(fr.length * (0.35 + rng() * 0.3))];
+  const ks = rng() < 0.5 ? -1 : 1;
+  const kb = at(kf, ks * (WALL(kf) + 4200), G(kf) - 100);
+  const kh = 5200 + rng() * 1800;
+  geo.box(add(kb, [0, kh / 2, 0]), [3000, kh, 3000], Math.atan2(kf.f[0], kf.f[2]), STONE_A);
+  for (const [dx, dz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+    const cs = Math.cos(Math.atan2(kf.f[0], kf.f[2])), sn = Math.sin(Math.atan2(kf.f[0], kf.f[2]));
+    const off = [dx * 1500 * cs + dz * 1500 * sn, 0, -dx * 1500 * sn + dz * 1500 * cs];
+    tower(geo, lights, add(kb, off), kh + 1200, 520, rng, kf, ks);
+  }
+  for (let k = 0; k < 10; k++) {
+    const p = add(kb, add(scale(kf.r, -ks * 1505), [0, 800 + k * 420, 0]));
+    geo.box(add(p, scale(kf.f, (rng() - 0.5) * 2000)), [10, 260, 140], Math.atan2(kf.r[0], kf.r[2]), GLASS[Math.floor(rng() * GLASS.length)], 0.9);
+  }
+
+  // gatehouses at every thread-the-needle gate
+  for (const n of map.needles || []) gatehouse(geo, lights, n, rng);
+
+  const mat = propMaterial({ dir: [-0.35, 0.4, -0.85], color: [0.42, 0.48, 0.7], ambient: [0.16, 0.15, 0.22], lamp: 0.55, lampColor: [1.0, 0.7, 0.45] });
+  finish(group, geo, mat);
+  finishLights(group, lights);
+  group.userData.mats.push(moatMat);
+  return group;
+}
+
+function tower(geo, lights, base, h, r, rng, f, s) {
+  const top = add(base, [0, h, 0]);
+  geo.cyl(base, top, r, r * 0.95, 10, STONE_A);
+  // crown and merlons
+  geo.cyl(top, add(top, [0, 120, 0]), r * 1.12, r * 1.12, 10, STONE_B);
+  for (let k = 0; k < 10; k++) {
+    const a = (k / 10) * Math.PI * 2;
+    geo.box(add(top, [Math.cos(a) * r * 1.05, 200, Math.sin(a) * r * 1.05]), [110, 160, 110], a, STONE_A);
+  }
+  // conical roof, flag and banner
+  const roofTop = add(top, [0, 120 + r * 2.2, 0]);
+  geo.cyl(add(top, [0, 120, 0]), roofTop, r * 1.18, 0, 10, ROOF);
+  geo.cyl(roofTop, add(roofTop, [0, 420, 0]), 8, 6, 4, [0.6, 0.6, 0.6]);
+  const flagC = [[0.9, 0.15, 0.2], [0.2, 0.3, 0.9], [0.95, 0.75, 0.2]][Math.floor(rng() * 3)];
+  const fp = add(roofTop, [0, 300, 0]);
+  const fd = scale(f.f, -260);
+  geo.quad(fp, add(fp, fd), add(add(fp, fd), [0, -150, 0]), add(fp, [0, -150, 0]), flagC, 0.15, [0, 0.8, 0.8, 0]);
+  // stained-glass windows facing the course
+  const toward = scale(f.r, -s);
+  for (let k = 0; k < 3; k++) {
+    const wy = h * (0.45 + k * 0.17);
+    geo.box(add(add(base, scale(toward, r * 0.98)), [0, wy, 0]), [12, 240, 120], Math.atan2(toward[0], toward[2]) + Math.PI / 2, GLASS[Math.floor(rng() * GLASS.length)], 0.95);
+  }
+  lights.dot(add(roofTop, [0, 440, 0]), [1.0, 0.2, 0.15], 60, 0.5, rng());
+}
+
+function gatehouse(geo, lights, n, rng) {
+  const c = n.gapCenter, R = n.right, F = n.fwd;
+  const P = (lat, y, fwd = 0) => [c[0] + R[0] * lat + F[0] * fwd, y, c[2] + R[2] * lat + F[2] * fwd];
+  const half = n.size / 2;
+  const slotA = n.slotLat - half, slotB = n.slotLat + half;
+  const yaw = Math.atan2(F[0], F[2]);
+  const T = 140; // visual wall half-thickness (the collision slab is a little thinner)
+  const block = (l0, l1, y0, y1) => {
+    const corners = [P(l0, y0, -T), P(l1, y0, -T), P(l1, y0, T), P(l0, y0, T)];
+    const tops = corners.map((p) => [p[0], y1, p[2]]);
+    const col = mix(STONE_B, STONE_A, rng());
+    for (let k = 0; k < 4; k++) geo.quad(corners[k], corners[(k + 1) % 4], tops[(k + 1) % 4], tops[k], col);
+    geo.quad(tops[0], tops[1], tops[2], tops[3], STONE_B);
+  };
+  block(-n.reach, slotA, n.yBot, n.yTop);
+  block(slotB, n.reach, n.yBot, n.yTop);
+  if (n.lintel != null) block(slotA, slotB, c[1] + n.lintel, n.yTop);
+  // crenellations along the top
+  for (let l = -n.reach; l < n.reach; l += 280) {
+    if (l > slotA - 100 && l < slotB + 100 && n.lintel == null) continue;
+    geo.box(P(l + 70, n.yTop + 90), [140, 180, T * 2], yaw, STONE_A);
+  }
+  // flanking towers right beside the slot
+  for (const l of [slotA - 260, slotB + 260]) {
+    const base = P(l, n.yBot);
+    geo.cyl(base, add(base, [0, n.yTop - n.yBot + 500, 0]), 230, 220, 8, STONE_A);
+    const top = add(base, [0, n.yTop - n.yBot + 500, 0]);
+    geo.cyl(top, add(top, [0, 700, 0]), 270, 0, 8, ROOF);
+  }
+  // portcullis raised above the opening, glowing edge so the slot reads at speed
+  const pt = n.lintel != null ? c[1] + n.lintel : n.yTop;
+  for (let l = slotA + 30; l < slotB; l += 60) geo.line(P(l, pt - 10, -T - 5), P(l, pt - 260, -T - 5), [0.35, 0.33, 0.3]);
+  geo.line(P(slotA, n.yBot + 200, -T - 6), P(slotA, pt, -T - 6), [1.6, 0.8, 0.3]);
+  geo.line(P(slotB, n.yBot + 200, -T - 6), P(slotB, pt, -T - 6), [1.6, 0.8, 0.3]);
+  // torches either side
+  for (const l of [slotA - 60, slotB + 60]) {
+    const p = P(l, c[1] - 150, -T - 30);
+    lights.dot(p, [1.0, 0.55, 0.15], 130, 8 + rng() * 4, rng());
+    lights.dot(p, [1.0, 0.35, 0.05], 190, 0, 0);
+  }
 }

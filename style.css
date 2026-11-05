@@ -208,3 +208,12 @@ kbd { font-family: var(--font-display); font-size: 12px; padding: 2px 6px; borde
 .card .lock::before { content: ''; position: absolute; left: 1px; top: -9px; width: 6px; height: 7px; border: 2px solid var(--muted); border-bottom: none; border-radius: 5px 5px 0 0; }
 .new-badge { position: absolute; top: 14px; right: 14px; font-family: var(--font-display); font-size: 11px; letter-spacing: 0.2em; color: #05010d; background: var(--yellow); padding: 3px 8px; border-radius: 4px; box-shadow: 0 0 12px rgba(255, 225, 77, 0.7); }
 #finish-splits .unlocked { font-family: var(--font-display); text-align: center; color: var(--yellow); letter-spacing: 0.15em; padding: 10px; margin-bottom: 8px; border: 1px solid rgba(255, 225, 77, 0.5); border-radius: 8px; text-shadow: 0 0 10px rgba(255, 225, 77, 0.7); animation: popin 0.4s ease-out; }
+
+/* ---------- themes / online ---------- */
+.diff.insane { color: #fff; border: 1px solid var(--red); background: linear-gradient(90deg, rgba(255, 68, 102, 0.55), rgba(155, 77, 255, 0.55)); }
+#map-tabs button .prog, #lb-tabs button .prog { font-size: 10px; color: var(--yellow); margin-left: 6px; }
+#map-theme-blurb { margin: -6px 0 12px; }
+.small-tabs button { font-size: 11px; padding: 6px 10px; }
+#finish-global { font-family: var(--font-display); color: var(--cyan); margin-top: 8px; letter-spacing: 0.08em; }
+#finish-name { margin-top: 10px; }
+table.lb td.who { color: var(--text); font-weight: 600; }

@@ -21,7 +21,7 @@ for (const map of MAPS) {
       // a full-speed run from the start that takes the fast line
       const r = playSection(map, world, 0, { full: true, skip: [f.from, f.to] });
       report(`${map.id} fork${fi}`, r);
-      if (r.speedAtFork != null && r.speedAtFork < f.speed) {
+      if (!r.ok && r.speedAtFork != null && r.speedAtFork < f.speed) {
         console.log(`    (bot only had ${r.speedAtFork.toFixed(0)} u/s at the fork; skipping fast-line check)`);
         return;
       }
@@ -40,4 +40,25 @@ test('unlock chain: every locked map can eventually be unlocked', async () => {
   }
   assert.equal(done.size, MAPS.length, `unreachable: ${MAPS.filter((m) => !done.has(m.id)).map((m) => m.id)}`);
   assert.ok(!isUnlocked(MAPS.find((m) => m.id === 'final-overdrive'), () => false), 'finale starts locked');
+});
+
+test('every theme has five maps, easy to insane, chained unlocks', async () => {
+  const { THEMES } = await import('../src/maps/index.js');
+  const tiers = ['easy', 'medium', 'hard', 'expert', 'insane'];
+  for (const th of THEMES) {
+    const maps = MAPS.filter((m) => m.group === th.id);
+    assert.equal(maps.length, 5, th.id);
+    maps.forEach((m, i) => {
+      assert.equal(m.difficulty, tiers[i], m.id);
+      assert.deepEqual(m.unlock?.after ?? null, i ? [maps[i - 1].id] : null, m.id);
+    });
+  }
+});
+
+test('harder tiers bring needles and long jumps', () => {
+  const insane = MAPS.filter((m) => m.difficulty === 'insane');
+  for (const m of insane) {
+    if (!m.needles) continue;
+    assert.ok(m.needles.length >= 3 && m.jumps.length >= 2, `${m.id}: ${m.needles.length} needles, ${m.jumps.length} jumps`);
+  }
 });

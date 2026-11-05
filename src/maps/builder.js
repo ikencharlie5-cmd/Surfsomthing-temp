@@ -187,6 +187,9 @@ export class Course {
     this.line = [];
     this.checkpoints = []; // { idx, hint }
     this.forks = []; // { from, to, speed }
+    this.extra = []; // extra brushes (needle walls)
+    this.needles = [];
+    this.jumps = [];
     this.minY = Infinity;
     this.slope = 0.2; // drop per unit length of the last ramp move
   }
@@ -291,14 +294,68 @@ export class Course {
    */
   gap(length, shift = 0, opts = {}) {
     this._flush();
-    const { drop: forced, vmin, ...rampOpts } = opts;
+    const { drop: forced, vmin, needle, ...rampOpts } = opts;
     const drop = forced ?? this.autoDrop(length, shift, this.slope, vmin);
     Object.assign(this.opts, rampOpts);
     const [fx, fz] = fwdOf(this.h);
     const [rx, rz] = rightOf(this.h);
+    const A = [...this.p];
     this.p = [this.p[0] + fx * length + rx * shift, this.p[1] - drop, this.p[2] + fz * length + rz * shift];
     this._mark(true);
     this.path = [[...this.p]];
+    if (needle) this._needle(A, [...this.p], needle);
+    return this;
+  }
+
+  /**
+   * "Thread the needle": a solid wall across the middle of the gap from A to
+   * B with one narrow vertical slot. The slot is centred where a rider
+   * holding the intended line passes (the same lateral offset the bot
+   * targets), so missing it means slamming into the wall.
+   * needle: { size (slot width), color, kind, at (0..1 along the gap), top, bottom }
+   */
+  _needle(A, B, o) {
+    const t = o.at ?? 0.5;
+    const c = [A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t, A[2] + (B[2] - A[2]) * t];
+    const dx = B[0] - A[0], dz = B[2] - A[2];
+    const l = Math.hypot(dx, dz) || 1;
+    const fx = dx / l, fz = dz / l, rx = -fz, rz = fx;
+    const w = this.opts.width, h = this.opts.height;
+    const faceSign = this.opts.face === 'right' ? 1 : -1;
+    const slot = faceSign * w * 0.45; // where the bot (and a clean rider) flies
+    const half = (o.size ?? 200) / 2;
+    const reach = w + 1600;
+    const yTop = Math.max(A[1], B[1]) + (o.top ?? 1100);
+    const yBot = Math.min(A[1], B[1]) - h - (o.bottom ?? 1700);
+    const thick = 60;
+    const slab = (l0, l1, y0, y1) => {
+      const pts = [];
+      for (const a of [-thick, thick]) for (const lat of [l0, l1]) for (const y of [y0, y1]) {
+        pts.push([c[0] + fx * a + rx * lat, y, c[2] + fz * a + rz * lat]);
+      }
+      return pts;
+    };
+    const color = o.color || [0.9, 0.9, 1.0];
+    // castle gates are drawn by the castle scenery instead
+    const meta = { kind: o.kind || 'wall', color, edge: o.edge ?? 1.2, needle: true, hidden: !!o.castle };
+    this.extra.push({ points: slab(-reach, slot - half, yBot, yTop), ...meta });
+    this.extra.push({ points: slab(slot + half, reach, yBot, yTop), ...meta });
+    if (o.lintel) this.extra.push({ points: slab(slot - half, slot + half, c[1] + o.lintel, yTop), ...meta });
+    this.needles.push({
+      center: [c[0] + rx * slot, c[1], c[2] + rz * slot], size: o.size ?? 200, heading: Math.atan2(-fx, -fz) * 180 / Math.PI,
+      gapIdx: this.line.length - 1, gapCenter: c, slotLat: slot, reach, yTop, yBot, right: [rx, 0, rz], fwd: [fx, 0, fz], lintel: o.lintel ?? null,
+    });
+  }
+
+  /**
+   * "Jump far": a steep launch ramp, then a long gap only riders carrying
+   * `speed` can clear (slower riders fall short of the far ramp).
+   */
+  longJump(length, speed, opts = {}) {
+    const launch = opts.launch ?? 2400;
+    this.straight(launch, launch * (opts.launchSlope ?? 0.36));
+    this.gap(length, 0, { ...opts.ramp, vmin: speed });
+    this.jumps.push({ gapIdx: this.line.length - 1, length, speed });
     return this;
   }
 
@@ -458,6 +515,9 @@ export function addCourse(b, cfg) {
 
   m.line = line;
   m.forks = course.forks;
+  m.needles = course.needles;
+  m.jumps = course.jumps;
+  m.brushes.push(...course.extra);
   m.checkpoints = [
     { idx: 0, pos: spawn, yaw: h * D2R, hint: cfg.startHint || null, start: true },
     ...course.checkpoints.map((c) => ({ idx: c.idx, hint: c.hint, ...checkpointSpawn(line, c.idx) })),

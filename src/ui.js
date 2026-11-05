@@ -65,11 +65,26 @@ export class UI {
   back() { const prev = this.stack.pop(); if (prev) this.show(prev); else this.show('menu'); }
   showHud(on) { this.hud.root.classList.toggle('hidden', !on); }
 
-  renderMaps(maps, isUnlocked) {
+  renderMaps(maps, isUnlocked, themes) {
     const list = $('#map-list');
     list.innerHTML = '';
     const nameOf = (id) => maps.find((x) => x.id === id)?.name || id;
-    for (const m of maps) {
+    // theme tabs with progress (finished maps out of the theme's five)
+    const tabs = $('#map-tabs');
+    tabs.innerHTML = '';
+    if (!this.mapTab) this.mapTab = themes[0].id;
+    for (const th of themes) {
+      const inTheme = maps.filter((m) => m.group === th.id);
+      const done = inTheme.filter((m) => store.hasFinished(m.id)).length;
+      const btn = document.createElement('button');
+      btn.innerHTML = `${esc(th.label)}<span class="prog">${done}/${inTheme.length}</span>`;
+      btn.className = th.id === this.mapTab ? 'active' : '';
+      btn.onclick = () => { this.mapTab = th.id; this.renderMaps(maps, isUnlocked, themes); };
+      tabs.appendChild(btn);
+    }
+    const theme = themes.find((t) => t.id === this.mapTab);
+    $('#map-theme-blurb').textContent = theme?.blurb || '';
+    for (const m of maps.filter((x) => x.group === this.mapTab)) {
       const pb = store.getBoard(m.id)[0];
       const open = isUnlocked(m);
       const card = document.createElement('div');
@@ -77,15 +92,18 @@ export class UI {
       card.tabIndex = 0;
       card.dataset.map = m.id;
       if (open) card.dataset.action = 'play-map';
-      const space = m.env?.floorMode === 'sea' ? 'ocean' : m.env?.sky === 'space' ? 'space' : m.brushes.some((b) => b.kind === 'building') ? 'city'
-        : m.env?.sky === false ? 'enclosed' : m.ribs?.length ? 'canyon' : 'open sky';
+      const extras = [
+        m.needles?.length ? `${m.needles.length} needle${m.needles.length > 1 ? 's' : ''}` : '',
+        m.jumps?.length ? `${m.jumps.length} long jump${m.jumps.length > 1 ? 's' : ''}` : '',
+        m.forks?.length ? `${m.forks.length} fast line${m.forks.length > 1 ? 's' : ''}` : '',
+        m.cvars?.gravity ? 'low gravity' : '',
+      ].filter(Boolean).join(' · ');
       if (!open) {
         const need = m.unlock.after.filter((id) => !store.hasFinished(id)).map(nameOf);
         card.innerHTML = `
           <div class="diff ${m.difficulty}">${m.difficulty}</div>
           <div class="title"><span class="lock"></span>${esc(m.name)}</div>
           <div class="desc">${esc(m.description)}</div>
-          <div class="muted small">${space}</div>
           <div class="req">Finish ${need.map(esc).join(' + ')} to unlock</div>`;
         list.appendChild(card);
         continue;
@@ -95,7 +113,7 @@ export class UI {
         <div class="diff ${m.difficulty}">${m.difficulty}</div>
         <div class="title">${esc(m.name)}</div>
         <div class="desc">${esc(m.description)}</div>
-        <div class="muted small">${space}${m.forks?.length ? ` · ${m.forks.length} fast line${m.forks.length > 1 ? 's' : ''}` : ''}${m.cvars?.gravity ? ' · low gravity' : ''}</div>
+        <div class="muted small">${extras || '&nbsp;'}</div>
         <div class="pb">${pb ? 'PB ' + fmtTime(pb.time) : 'No time set'}</div>`;
       card.addEventListener('keydown', (e) => { if (e.key === 'Enter') this.h.onAction('play-map', { map: m.id }); });
       list.appendChild(card);
@@ -111,20 +129,29 @@ export class UI {
   endlessSeed() { return $('#endless-seed').value.trim() || randomSeed(); }
   setEndlessSeed(s) { $('#endless-seed').value = s; }
 
-  renderLeaderboards(maps) {
+  /**
+   * Records: pick a theme, then a map (or Endless); Local or Global.
+   * fetchGlobal(mapId) -> Promise<rows|null> is supplied by main.
+   */
+  renderLeaderboards(maps, themes, fetchGlobal, onlineOn) {
     const tabs = $('#lb-tabs');
     tabs.innerHTML = '';
-    const ids = [...maps.map((m) => [m.id, m.name]), ['endless', 'Endless']];
-    if (!this.lbTab) this.lbTab = ids[0][0];
-    for (const [id, name] of ids) {
+    const groups = [...themes.map((t) => [t.id, t.label]), ['endless', 'Endless']];
+    if (!this.lbGroup) this.lbGroup = groups[0][0];
+    for (const [id, label] of groups) {
       const b = document.createElement('button');
-      b.textContent = name;
-      b.className = id === this.lbTab ? 'active' : '';
-      b.onclick = () => { this.lbTab = id; this.renderLeaderboards(maps); };
+      b.textContent = label;
+      b.className = id === this.lbGroup ? 'active' : '';
+      b.onclick = () => { this.lbGroup = id; this.lbTab = null; this.renderLeaderboards(maps, themes, fetchGlobal, onlineOn); };
       tabs.appendChild(b);
     }
+    const mapTabs = $('#lb-maps');
+    mapTabs.innerHTML = '';
     const body = $('#lb-body');
-    if (this.lbTab === 'endless') {
+    const modeTabs = $('#lb-mode');
+    modeTabs.innerHTML = '';
+    if (this.lbGroup === 'endless') {
+      this.lbTab = 'endless';
       const best = store.getEndlessBest();
       body.innerHTML = best.score
         ? `<table class="lb"><tr><th>Best</th><th>Seed</th><th>Time</th><th>Date</th></tr>
@@ -132,11 +159,48 @@ export class UI {
         : '<p class="muted">No endless runs yet.</p>';
       return;
     }
+    const inTheme = maps.filter((m) => m.group === this.lbGroup);
+    if (!this.lbTab || !inTheme.some((m) => m.id === this.lbTab)) this.lbTab = inTheme[0].id;
+    for (const m of inTheme) {
+      const b = document.createElement('button');
+      b.textContent = m.name;
+      b.className = m.id === this.lbTab ? 'active' : '';
+      b.onclick = () => { this.lbTab = m.id; this.renderLeaderboards(maps, themes, fetchGlobal, onlineOn); };
+      mapTabs.appendChild(b);
+    }
+    this.lbMode = this.lbMode || (onlineOn ? 'global' : 'local');
+    for (const [mode, label] of [['local', 'This device'], ['global', 'Global']]) {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.className = mode === this.lbMode ? 'active' : '';
+      b.onclick = () => { this.lbMode = mode; this.renderLeaderboards(maps, themes, fetchGlobal, onlineOn); };
+      modeTabs.appendChild(b);
+    }
+    if (this.lbMode === 'global') {
+      if (!onlineOn) { body.innerHTML = '<p class="muted">Global leaderboards aren\'t set up yet (see README: Online leaderboards).</p>'; return; }
+      body.innerHTML = '<p class="muted">Loading global times…</p>';
+      const want = this.lbTab;
+      fetchGlobal(want).then((rows) => {
+        if (this.lbTab !== want || this.lbMode !== 'global') return;
+        if (!rows || !rows.length) { body.innerHTML = '<p class="muted">No global times yet. Be the first!</p>'; return; }
+        body.innerHTML = `<table class="lb"><tr><th>#</th><th>Player</th><th>Time</th><th>Top speed</th><th>Date</th></tr>${rows.map((e, i) =>
+          `<tr><td>${i + 1}</td><td class="who">${esc(e.player)}</td><td class="t">${fmtTime(e.time_ms / 1000)}</td><td>${e.top_speed} u/s</td><td>${new Date(e.created_at).toLocaleDateString()}</td></tr>`).join('')}</table>`;
+      }).catch(() => { if (this.lbTab === want) body.innerHTML = '<p class="muted">Couldn\'t reach the global leaderboard. Check your connection.</p>'; });
+      return;
+    }
     const board = store.getBoard(this.lbTab);
     if (!board.length) { body.innerHTML = '<p class="muted">No times yet. Go set one!</p>'; return; }
-    body.innerHTML = `<table class="lb"><tr><th>#</th><th>Time</th><th>Date</th></tr>${board.map((e, i) =>
-      `<tr><td>${i + 1}</td><td class="t">${fmtTime(e.time)}</td><td>${new Date(e.date).toLocaleString()}</td></tr>`).join('')}</table>`;
+    body.innerHTML = `<table class="lb"><tr><th>#</th><th>Time</th><th>Top speed</th><th>Date</th></tr>${board.map((e, i) =>
+      `<tr><td>${i + 1}</td><td class="t">${fmtTime(e.time)}</td><td>${e.topSpeed ? e.topSpeed + ' u/s' : '-'}</td><td>${new Date(e.date).toLocaleString()}</td></tr>`).join('')}</table>`;
   }
+
+  /** Finish screen: show global rank / status, or ask for a name. */
+  setGlobalResult(text, askName = false) {
+    $('#finish-global').textContent = text || '';
+    $('#finish-name').classList.toggle('hidden', !askName);
+    if (askName) { const i = $('#name-input'); i.value = this.settings.playerName || ''; setTimeout(() => i.focus(), 50); }
+  }
+  nameInput() { return $('#name-input').value; }
 
   showFinish(r, map, hasNext, nextLabel = 'Next map') {
     const title = $('#finish-title');
@@ -169,6 +233,7 @@ export class UI {
     next.textContent = nextLabel;
     next.classList.toggle('hidden', !hasNext);
     next.dataset.action = 'next';
+    this.setGlobalResult('');
     this.show('finish');
   }
 
@@ -217,6 +282,10 @@ export class UI {
     bindRange('set-scale', 'renderScale', (v) => Math.round(v * 100) + '%');
     bindCheck('set-particles', 'particles');
     bindCheck('set-fps', 'showFps');
+    const nameEl = $('#set-name');
+    nameEl.value = s.playerName || '';
+    nameEl.addEventListener('change', () => { s.playerName = nameEl.value.trim().slice(0, 16); this.h.onSettingsChange(s); });
+    this._refreshers.push(() => { nameEl.value = s.playerName || ''; });
     bindCheck('set-ghost', 'ghost');
     bindCheck('set-autobhop', 'autobhop');
     bindCheck('set-keys', 'showKeys');

@@ -16,6 +16,7 @@ export const DEFAULT_SETTINGS = {
   showKeys: true,
   hints: true,
   speedGraph: true,
+  playerName: '',
   airaccelerate: 150,
   volume: 0.8,
   music: 0.55,

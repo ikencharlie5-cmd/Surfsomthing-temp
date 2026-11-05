@@ -24,7 +24,7 @@ Then open http://localhost:8080.
 | --- | --- |
 | Move / strafe | `W` `A` `S` `D` |
 | Jump (hold to bunny-hop) | `Space` |
-| Restart run | `R` |
+| Restart run | `R` (or `T`) |
 | Toggle PB ghost | `G` |
 | Pause / menu | `Esc` |
 
@@ -54,26 +54,35 @@ Start with **First Wave**, the tutorial map. It shows hints at each stage.
 - **Exact collision:** ramps are convex brushes. Box traces use the brush's
   Minkowski sum with the player box (face, axis and edge-bevel planes), so you
   don't snag on seams between ramp segments.
-- **Thirteen continuous momentum maps.** None of them teleport you, so you
-  never lose speed between sections. Each starts with a steep drop-in that
-  flattens out, so you start with speed. There are no checkpoints: fall and
-  the run restarts from the top. Five maps are **earned** by finishing others.
+- **50 maps: 10 themes x 5 difficulties.** Each theme has an easy, medium,
+  hard, expert and insane map. Easy is open; finishing a map unlocks the next
+  one in its theme. Every map starts with a steep drop-in that flattens out,
+  then runs as one continuous line (no teleports, no checkpoints: fall and
+  the run restarts). Harder maps are longer (up to ~120k units, about a
+  minute at speed).
 
-  | Map | Difficulty | Space | Unlock |
-  | --- | --- | --- | --- |
-  | First Wave | tutorial | open sky, with hints | open |
-  | Neon Drift | easy | open sky, 1 fast line | open |
-  | Night Tunnel | medium | fully enclosed ribbed tunnel | open |
-  | Canyon Run | medium | real rock canyon at night: strata walls, arches, mesas, neon cacti, tumbleweeds, huge moon | open |
-  | Overclock | hard | open sky, thin ramps, 2 fast lines | open |
-  | Data Core | hard | server farm: LED racks, cable trays, data pulses | open |
-  | Skyline Rush | medium | real city at night: every block built up, rooftop neon, beacons, street traffic, distant skyline | finish Neon Drift |
-  | Vapor Coast | easy | wild empty beach: rocky headland start, dunes down to the sea, palm clusters, sea stacks, rock arch, open ocean | finish Night Tunnel |
-  | Crystal Cave | medium | natural rock cave: stalactites, crystal clusters, underground river | finish Canyon Run |
-  | Orbital | hard | space station: panelled corridors, scaffolds, solar arrays, giant ring station, lower gravity | finish Overclock |
-  | Lost Temple | medium | night jungle: giant trees, vines, river, waterfall, ruins, stepped temple, fireflies | finish Vapor Coast |
-| Magma Run | hard | erupting volcano: lava rivers, sea of magma, embers, obsidian spikes, volcanic sky | finish Skyline Rush |
-| Final Overdrive | expert | warp tunnel of light rings through deep space, raw speed, 3 fast lines | finish Data Core, Orbital and Crystal Cave |
+  | Theme | Easy | Medium | Hard | Expert | Insane |
+  | --- | --- | --- | --- | --- | --- |
+  | Beach (wild sunset coast) | First Wave (tutorial) | Vapor Coast | Riptide | Coral Crown | Tsunami |
+  | Canyon (red rock, desert moon) | Dust Devil | Canyon Run | Mesa Mirage | Rattlesnake Pass | Badlands |
+  | Cave (crystals, underground river) | Echo Hollow | Crystal Cave | Glowworm Grotto | The Deep | Abyssal Drop |
+  | City (towers, street traffic) | Neon Drift | Skyline Rush | Rooftop Run | Downtown Blitz | Megacity |
+  | Space Station (low gravity) | Docking Bay | Overclock | Orbital | Zero-G | Event Horizon |
+  | Server Farm (LED racks) | Night Tunnel | Packet Storm | Data Core | Firewall | Kernel Panic |
+  | Jungle (trees, ruins, temple) | Canopy Glide | Lost Temple | Serpent River | Jaguar Ruins | Green Hell |
+  | Volcano (lava, embers) | Ash Fields | Obsidian Slopes | Magma Run | Pyroclast | Caldera |
+  | Warp (light-ring tunnels) | Warp Lane | Hyperdrive | Lightspeed | Final Overdrive | Singularity |
+  | Castle (weave through a fortress) | Gatehouse | Battlements | Moonlit Keep | Dragon Spire | Siege |
+
+  The newer maps are laid out by a seeded generator (`src/maps/generator.js`)
+  that varies the section mix per map. A seed is only used once the surf bot
+  has finished it, including every fast line (`node tools/seed-search.mjs`).
+- **Thread the needle:** solid walls across some gaps with one narrow slot to
+  fly through (castle maps draw them as gatehouses with a raised portcullis).
+  Slots shrink with difficulty, from 260 units on easy to 125 on insane.
+  Miss the slot and you crash.
+- **Long jumps:** a steep launch ramp, then a 2000-3500 unit gap that only
+  riders carrying enough speed can clear.
 - **Fast lines:** at some gaps, a long jump straight ahead lands directly on a
   later ramp, but only if you're carrying enough speed. Slower riders take a
   safe detour to the side.
@@ -91,6 +100,43 @@ Start with **First Wave**, the tutorial map. It shows hints at each stage.
   a quality yourself.
 - **Audio:** everything is synthesized with WebAudio: wind that rises with
   speed, ramp hiss, game sounds, and a procedural synthwave soundtrack.
+
+## Online leaderboards (Supabase, free)
+
+Global top-10 boards per map, with player names. The game works offline
+without this and just shows local records.
+
+1. Create a free account and project at https://supabase.com. Any region
+   works; save the database password somewhere.
+2. In the project, open **SQL Editor**, paste the SQL below and click **Run**.
+3. Open **Project Settings → API** and copy the **Project URL** and the
+   **anon public** key.
+4. Put them in `src/config.js` (`SUPABASE_URL`, `SUPABASE_ANON_KEY`), or send
+   them to Claude to commit. The anon key is designed to be public; the
+   row-level security rules below are what protect the table.
+
+```sql
+create table public.scores (
+  id bigint generated always as identity primary key,
+  map_id text not null check (map_id ~ '^[a-z0-9-]{3,40}$'),
+  player text not null check (char_length(player) between 1 and 16),
+  time_ms integer not null check (time_ms between 5000 and 3600000),
+  top_speed integer not null default 0 check (top_speed between 0 and 6000),
+  combo integer not null default 0 check (combo >= 0),
+  created_at timestamptz not null default now()
+);
+create index scores_map_time on public.scores (map_id, time_ms);
+
+alter table public.scores enable row level security;
+-- anyone can read the boards
+create policy "read scores" on public.scores for select to anon using (true);
+-- anyone can post a run (the checks above reject nonsense); no update/delete
+create policy "post scores" on public.scores for insert to anon with check (true);
+```
+
+The client also refuses to post times faster than the course length allows
+at the 3500 u/s speed cap. It's a basic sanity check, not real anti-cheat:
+someone determined could still post a fake time through the API.
 
 ## Turning on GitHub Pages
 

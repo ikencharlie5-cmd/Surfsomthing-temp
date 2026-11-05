@@ -7,9 +7,10 @@ export default function build() {
     description: 'Surf through a ribbed neon tunnel. Close walls, low ceiling, no sky.',
     env: { sky: false, mountains: false, fogColor: [0.025, 0.0, 0.05], fogNear: 2500, fogFar: 17000, floorY: -2500 },
   });
-  const tunnel = { side: 420, top: 750, bottom: 650, ceiling: true, color: COLORS.purple, ribColor: COLORS.cyan, ribSpacing: 800 };
+  // enclosed server-farm shaft (scenery drawn by the 'servers' theme)
+  const tunnel = { side: 420, top: 750, bottom: 650, ceiling: true, hidden: true, color: COLORS.purple };
   addCourse(b, {
-    ramp: { width: 270, height: 390, color: COLORS.magenta, minSpeed: 1100 },
+    ramp: { width: 270, height: 390, color: COLORS.magenta, minSpeed: 1100, tunnel },
     build: (c) => c
       .dropIn(6000, 2300).straight(2000, 250)
       .gap(800, 0, { tunnel }).straight(3500, 380)

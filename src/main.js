@@ -5,7 +5,8 @@ import { AudioEngine } from './audio.js';
 import { Input } from './input.js';
 import { Game, TICK } from './game.js';
 import { UI, randomSeed, dailySeed } from './ui.js';
-import { MAPS, getMap, isUnlocked } from './maps/index.js';
+import { MAPS, THEMES, getMap, isUnlocked } from './maps/index.js';
+import { online, submitScore, topScores, cleanName } from './online.js';
 import * as store from './storage.js';
 
 const canvas = document.getElementById('view');
@@ -18,6 +19,21 @@ let state = 'menu'; // menu | playing | paused | finished
 let currentMap = null;
 let lockedBefore = [];
 let pendingNext = null;
+let pendingRun = null;
+
+/** Post the last finished run to the global leaderboard (if set up). */
+async function postRun() {
+  if (!online.enabled || !pendingRun) return;
+  if (!cleanName(settings.playerName)) { ui.setGlobalResult('Add your name to post this time globally:', true); return; }
+  const run = pendingRun;
+  ui.setGlobalResult('Posting to the global leaderboard…');
+  const res = await submitScore(run.map, { player: settings.playerName, ...run });
+  if (pendingRun !== run) return;
+  pendingRun = null;
+  if (res.ok) ui.setGlobalResult(`Global rank #${res.rank} on ${run.map.name}`);
+  else if (res.error === 'implausible') ui.setGlobalResult('That time looks impossible, so it wasn\'t posted.');
+  else ui.setGlobalResult('Couldn\'t reach the global leaderboard (saved locally).');
+}
 const unlocked = (m) => isUnlocked(m, store.hasFinished);
 /** Next playable map after the current one (prefers anything just unlocked). */
 function nextMap(justUnlocked = []) {
@@ -42,8 +58,10 @@ const game = new Game(renderer, audio, settings, {
     r.unlocked = newly;
     if (newly.length) setTimeout(() => audio.play('record'), 700);
     pendingNext = nextMap(newly);
+    pendingRun = { map: currentMap, timeMs: r.time * 1000, topSpeed: r.topSpeed, combo: r.combo };
     setTimeout(() => {
       ui.showFinish(r, currentMap, !!pendingNext, newly.length ? `Play ${pendingNext.name}` : 'Next map');
+      postRun();
     }, 250);
   },
   onEndlessOver(r) {
@@ -77,6 +95,10 @@ function showStageHint(short = false) {
 
 const DEMO_MAPS = ['neon-drift', 'night-tunnel', 'canyon-run'];
 let demoIndex = Math.floor(Math.random() * DEMO_MAPS.length);
+function renderRecords() {
+  ui.renderLeaderboards(MAPS, THEMES, (id) => topScores(id), online.enabled);
+}
+
 function startDemo() {
   const demoMap = getMap(DEMO_MAPS[demoIndex++ % DEMO_MAPS.length]);
   game.loadMap(demoMap, { demo: true });
@@ -144,18 +166,23 @@ function handleAction(action, data) {
   if (!audio.music?.timer) { audio.musicOn(true); }
   audio.play('click');
   switch (action) {
-    case 'maps': ui.renderMaps(MAPS, unlocked); ui.push('maps'); break;
+    case 'maps': ui.renderMaps(MAPS, unlocked, THEMES); ui.push('maps'); break;
     case 'endless': ui.renderEndless(); ui.push('endless'); break;
     case 'endless-random': ui.setEndlessSeed(randomSeed()); break;
     case 'endless-daily': ui.setEndlessSeed(dailySeed()); break;
     case 'endless-go': startEndless(ui.endlessSeed()); break;
     case 'endless-new': startEndless(randomSeed()); break;
-    case 'leaderboards': ui.renderLeaderboards(MAPS); ui.push('leaderboards'); break;
+    case 'leaderboards': renderRecords(); ui.push('leaderboards'); break;
+    case 'save-name':
+      settings.playerName = cleanName(ui.nameInput());
+      store.saveSettings(settings);
+      postRun();
+      break;
     case 'lb-clear':
       if (ui.lbTab && ui.lbTab !== 'endless' && confirm('Clear all times and the ghost for this map?')) {
-        store.clearBoard(ui.lbTab); ui.renderLeaderboards(MAPS);
+        store.clearBoard(ui.lbTab); renderRecords();
       } else if (ui.lbTab === 'endless' && confirm('Clear your endless record?')) {
-        store.setEndlessBest({ score: 0, seed: null }); ui.renderLeaderboards(MAPS);
+        store.setEndlessBest({ score: 0, seed: null }); renderRecords();
       }
       break;
     case 'settings': ui.refreshSettings(); ui.push('settings'); break;
