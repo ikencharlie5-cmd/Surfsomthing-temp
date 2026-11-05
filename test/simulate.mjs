@@ -36,7 +36,7 @@ export function playSection(map, world, cp, opts = {}) {
     if (gt.touches(p.pos, HULL)) return { ok: true, ticks: i, maxSpeed, endSpeed: sp, speedAtFork, finished: true };
     const lp = line[bot.idx];
     if (map.waterY != null && p.pos.y - 36 < map.waterY) return { ok: false, reason: 'splash', ticks: i, idx: bot.idx, of: line.length, pos: p.pos, maxSpeed, speedAtFork };
-    if (p.pos.y < lp.p[1] - lp.height - 1500) return { ok: false, reason: 'fell', ticks: i, idx: bot.idx, of: line.length, pos: p.pos, maxSpeed, speedAtFork };
+    if (p.pos.y - 36 < lp.p[1] - lp.height - (map.groundDrop ?? 1500)) return { ok: false, reason: 'fell', ticks: i, idx: bot.idx, of: line.length, pos: p.pos, maxSpeed, speedAtFork };
   }
   return { ok: false, reason: 'timeout', idx: bot.idx, of: line.length, pos: p.pos, maxSpeed };
 }

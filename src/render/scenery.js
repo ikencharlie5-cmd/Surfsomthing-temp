@@ -351,26 +351,29 @@ const NEON_GREEN = [0.25, 1.0, 0.55];
 const NEON_YEL = [1.0, 0.85, 0.3];
 
 function buildBeach(map, t, density) {
-  // Layout (lat > 0 is the rider's open side):
-  //   ... ocean to the horizon | surf | wet sand | beach (under the course) | boardwalk | road | palms | low hills
+  // A wild, empty beach. The dunes follow the course down (a fixed distance
+  // under the ramps) and slope gently to the ocean on the rider's open side
+  // (lat > 0); near the finish they flatten out into the beach itself.
   const group = new THREE.Group();
   const geo = new Geo();
-  const lights = new Lights();
   const rng = rand(t.seed || 3);
   let fr = frames(map.line, 320);
-  fr = extendFrames(fr, 9000, 16000, 320);
+  fr = extendFrames(fr, 7000, 16000, 320);
   for (const f of fr) f.r = [-f.r[0], 0, -f.r[2]];
   const seaY = t.seaY;
-  const SHORE = 2600; // shoreline offset from the course centre line (open side)
+  const drop = t.sandDrop ?? 700;
   const W = (f) => f.e.width;
-  const dune = (p) => (fbm3(p[0] / 1400, 0, p[2] / 1400, 3) - 0.5) * 70;
-  const hill = (p) => fbm3(p[0] / 6000, 0, p[2] / 6000, 3);
+  const landY = (f) => Math.max(f.p[1] - f.e.height - drop, seaY + 40);
+  const H = (f) => landY(f) - seaY;
+  const shore = (f) => W(f) + 1300 + H(f) * 2.4;
+  const dune = (p) => (fbm3(p[0] / 1500, 0, p[2] / 1500, 3) - 0.5) * 160;
   const prof = (f) => {
-    const w = W(f);
+    const L = landY(f), w = W(f), S = shore(f), h = H(f);
+    const k = (x) => w + 700 + (S - w - 700) * x;
     return [
-      [-(w + 26000), seaY + 2400], [-(w + 16000), seaY + 1300], [-(w + 9000), seaY + 300],
-      [-(w + 6200), seaY + 70], [-(w + 4300), seaY + 55], [-(w + 3000), seaY + 50],
-      [0, seaY + 40], [SHORE * 0.6, seaY + 30], [SHORE, seaY + 4], [SHORE + 500, seaY - 60], [SHORE + 1400, seaY - 260],
+      [-(w + 16000), L + 2600], [-(w + 8000), L + 1100], [-(w + 3500), L + 260], [-(w + 1200), L + 40],
+      [0, L], [w + 700, L - 20], [k(0.3), L - h * 0.32], [k(0.6), L - h * 0.68], [k(0.85), seaY + h * 0.08 + 20],
+      [S, seaY + 4], [S + 500, seaY - 60], [S + 1500, seaY - 280],
     ];
   };
   const groundY = (f, lat) => {
@@ -381,164 +384,117 @@ function buildBeach(map, t, density) {
         return pts[i][1] + (pts[i + 1][1] - pts[i][1]) * k;
       }
     }
-    return seaY + 40;
+    return seaY;
   };
+  const SAND_A = [0.98, 0.64, 0.54], SAND_B = [1.0, 0.76, 0.6], SAND_WET = [0.55, 0.33, 0.36];
 
-  // terrain: bright sunset sand, dunes, hills fading into the haze
   strip(geo, fr, (f) => prof(f).map(([l, y], j) => [l, y, 0, 1]), {
-    displace: (p, j) => (j <= 2 ? (hill(p) - 0.3) * 2600 * (j === 0 ? 1 : j === 1 ? 0.6 : 0.25) : j <= 7 ? dune(p) : 0),
+    displace: (p, j) => (j <= 1 ? (fbm3(p[0] / 5000, 0, p[2] / 5000, 3) - 0.35) * 2200 : j <= 8 ? dune(p) : 0),
     color: (p, j) => {
-      if (j <= 2) return mix([0.55, 0.25, 0.45], [0.75, 0.38, 0.5], hill(p));
-      if (j >= 8) return [0.42, 0.28, 0.32];
-      if (j === 3) return [0.32, 0.4, 0.22];
-      const k = fbm3(p[0] / 900, 0, p[2] / 900, 2);
-      return mix([0.95, 0.62, 0.52], [1.0, 0.74, 0.6], k);
+      if (j >= 9) return SAND_WET;
+      const k = fbm3(p[0] / 1100, 0, p[2] / 1100, 2);
+      const c = mix(SAND_A, SAND_B, k);
+      return j <= 1 ? mix(c, [0.8, 0.45, 0.55], 0.35) : c;
     },
   });
 
-  // road (behind the boardwalk) with traffic and street lamps
-  const roadA = (f) => -(W(f) + 4900), roadB = (f) => -(W(f) + 4300);
-  for (let i = 0; i < fr.length - 1; i++) {
-    const a = fr[i], b = fr[i + 1];
-    const ya = seaY + 62, yb = seaY + 62;
-    geo.quad(at(a, roadA(a), ya), at(a, roadB(a), ya), at(b, roadB(b), yb), at(b, roadA(b), yb), [0.07, 0.05, 0.09]);
-    if (i % 2 === 0) geo.line(at(a, (roadA(a) + roadB(a)) / 2, ya + 3), at(b, (roadA(b) + roadB(b)) / 2, yb + 3), [1.4, 1.0, 0.3]);
-    if (i % 3 === 0) {
-      const p = at(a, roadB(a) + 60, ya);
-      geo.cyl(p, add(p, [0, 520, 0]), 9, 7, 5, [0.12, 0.08, 0.14]);
-      lights.dot(add(p, [0, 540, 0]), [1.0, 0.65, 0.3], 70);
-    }
-  }
-  for (let i = 0; i < fr.length - 12; i += 6) {
-    const a = fr[i], b = fr[i + 12];
-    const n = Math.round(2 * density);
-    for (let k = 0; k < n; k++) {
-      const sp = 0.05 + rng() * 0.05;
-      lights.flow(at(a, roadB(a) - 160, seaY + 100), at(b, roadB(b) - 160, seaY + 100), [1, 0.95, 0.8], 60, sp, rng());
-      lights.flow(at(b, roadA(b) + 160, seaY + 100), at(a, roadA(a) + 160, seaY + 100), [1, 0.15, 0.2], 55, sp, rng());
-    }
+  // rocky headland under the start platform
+  const sp = map.spawn.pos;
+  const f0 = fr.find((f) => !f.ext) || fr[0];
+  const base0 = landY(f0);
+  // (rock stays below the platform top and behind its front edge)
+  const topRock = sp[1] - 140;
+  for (let i = 0; i < 30; i++) {
+    const r = 220 + rng() * 360;
+    const y = base0 + rng() * Math.max(0, topRock - r - base0);
+    const off = [(rng() - 0.5) * 1100, 0, (rng() - 0.5) * 1100];
+    geo.blob(add([sp[0] - f0.f[0] * (r + 250), y, sp[2] - f0.f[2] * (r + 250)], off), r, mix([0.28, 0.16, 0.24], [0.42, 0.24, 0.3], rng()), 0, rng, 0.8);
   }
 
-  // boardwalk along the top of the beach, lamps and neon beach shops
-  for (let i = 0; i < fr.length - 1; i++) {
-    const a = fr[i], b = fr[i + 1];
-    const l0 = (f) => -(W(f) + 3000), l1 = (f) => -(W(f) + 3600);
-    const y = seaY + 120;
-    geo.quad(at(a, l0(a), y), at(a, l1(a), y), at(b, l1(b), y), at(b, l0(b), y), [0.42, 0.26, 0.2]);
-    geo.line(at(a, l0(a), y + 4), at(b, l0(b), y + 4), [1.5, 0.55, 0.3]);
-    if (i % 4 === 0) {
-      const p = at(a, l0(a) + 40, y);
-      geo.cyl(p, add(p, [0, 380, 0]), 8, 6, 5, [0.15, 0.08, 0.15]);
-      geo.blob(add(p, [0, 400, 0]), 24, i % 8 ? NEON_PINK : NEON_CYAN, 1, rng);
-    }
-    if (i % 9 === 4 && rng() < 0.85 * density) beachShop(geo, at(a, l1(a) - 450, y), Math.atan2(a.r[0], a.r[2]), rng);
-  }
-
-  // palms: groves behind the road, rows along the boardwalk, a few on the sand
+  // scattered clusters of neon palms (and the odd lonely one)
   const leafCols = [NEON_GREEN, NEON_CYAN, NEON_PINK];
+  const nClusters = Math.round(16 * density);
+  for (let c = 0; c < nClusters; c++) {
+    const f = fr[Math.floor(rng() * fr.length)];
+    const lat = rng() < 0.6 ? -(W(f) + 1500 + rng() * 5000) : W(f) + 900 + rng() * (shore(f) - W(f) - 1500);
+    const n = 2 + Math.floor(rng() * 5);
+    const col = leafCols[Math.floor(rng() * leafCols.length)];
+    for (let k = 0; k < n; k++) {
+      const l2 = lat + (rng() - 0.5) * 900;
+      const base = at(f, l2, 0);
+      base[0] += f.f[0] * (rng() - 0.5) * 900; base[2] += f.f[2] * (rng() - 0.5) * 900;
+      base[1] = groundY(f, l2) + dune(base) - 15;
+      palm(geo, base, 650 + rng() * 800, rng, rng() < 0.75 ? col : leafCols[Math.floor(rng() * 3)]);
+    }
+  }
+  for (let i = 0; i < Math.round(10 * density); i++) {
+    const f = fr[Math.floor(rng() * fr.length)];
+    const lat = W(f) + 1200 + rng() * (shore(f) - W(f) - 1600);
+    const base = at(f, lat, 0); base[1] = groundY(f, lat) + dune(base) - 15;
+    palm(geo, base, 800 + rng() * 600, rng, leafCols[Math.floor(rng() * 3)]);
+  }
+
+  // beach grass tufts glowing on the dunes
+  for (let i = 0; i < Math.round(260 * density); i++) {
+    const f = fr[Math.floor(rng() * fr.length)];
+    const lat = -(W(f) + 500 + rng() * 5000) * (rng() < 0.7 ? 1 : -0.4);
+    const base = at(f, lat, 0); base[1] = groundY(f, lat) + dune(base);
+    const col = rng() < 0.5 ? [0.3, 1.2, 0.8] : [0.9, 0.5, 1.2];
+    for (let k = 0; k < 5; k++) {
+      const a = rng() * Math.PI * 2, h = 70 + rng() * 90;
+      geo.line(base, add(base, [Math.cos(a) * 40, h, Math.sin(a) * 40]), col);
+    }
+  }
+
+  // boulders and driftwood along the waterline
   for (let i = 0; i < fr.length; i++) {
     const f = fr[i];
-    const spots = [];
-    if (i % 2 === 0) spots.push(-(W(f) + 3800 + rng() * 300));
-    if (rng() < 0.9 * density) spots.push(-(W(f) + 5200 + rng() * 3500));
-    if (rng() < 0.5 * density) spots.push(-(W(f) + 5200 + rng() * 3500));
-    if (rng() < 0.18 * density) spots.push(-W(f) + rng() * (SHORE * 0.8));
-    for (const lat of spots) {
-      const base = at(f, lat, 0);
-      base[1] = groundY(f, lat) + (lat > -(W(f) + 3000) ? dune(base) : 0) - 15;
-      palm(geo, base, 650 + rng() * 800, rng, leafCols[Math.floor(rng() * leafCols.length)]);
+    if (rng() < 0.22 * density) {
+      const lat = shore(f) - 200 - rng() * 700;
+      const base = at(f, lat, 0); base[1] = groundY(f, lat);
+      const n = 1 + Math.floor(rng() * 3);
+      for (let k = 0; k < n; k++) geo.blob(add(base, [(rng() - 0.5) * 300, 20, (rng() - 0.5) * 300]), 70 + rng() * 140, mix([0.25, 0.15, 0.22], [0.4, 0.25, 0.3], rng()), 0, rng, 0.7);
     }
-    // umbrellas, towels and surfboards on the sand
-    if (rng() < 0.45 * density) {
-      const lat = -W(f) * 0.5 + rng() * SHORE * 0.75;
-      const base = at(f, lat, 0); base[1] = groundY(f, lat) + dune(base);
-      umbrella(geo, base, rng);
-    }
-    if (rng() < 0.15 * density) {
-      const lat = SHORE * (0.3 + rng() * 0.4);
-      const base = at(f, lat, 0); base[1] = groundY(f, lat) + dune(base);
-      surfboard(geo, base, rng);
+    if (rng() < 0.12 * density) {
+      const lat = shore(f) - 300 - rng() * 1200;
+      const base = at(f, lat, 0); base[1] = groundY(f, lat) + 15;
+      const a = rng() * Math.PI;
+      const len = 250 + rng() * 300;
+      geo.cyl(add(base, [Math.cos(a) * -len / 2, 0, Math.sin(a) * -len / 2]), add(base, [Math.cos(a) * len / 2, 10, Math.sin(a) * len / 2]), 18, 12, 5, [0.45, 0.32, 0.3]);
     }
   }
 
-  // lifeguard towers near the water
-  for (const k of [0.2, 0.5, 0.8]) {
-    const f = fr[Math.floor(fr.length * k)];
-    lifeguardTower(geo, at(f, SHORE * 0.55, groundY(f, SHORE * 0.55)), Math.atan2(f.r[0], f.r[2]), rng);
-  }
-  // parked vintage cars along the road
-  for (const k of [0.15, 0.42, 0.7, 0.9]) {
-    const f = fr[Math.floor(fr.length * k)];
-    vintageCar(geo, at(f, roadB(f) + 240, seaY + 62), Math.atan2(f.f[0], f.f[2]));
-  }
-
-  // the pier: from the sand far out into the ocean, lamps and a neon arch
-  const pf = fr[Math.floor(fr.length * 0.62)];
-  const pierY = seaY + 170;
-  const p0 = SHORE * 0.4, p1 = SHORE + 7500;
-  const nP = 34;
-  for (let k = 0; k < nP; k++) {
-    const l0 = p0 + ((p1 - p0) * k) / nP, l1 = p0 + ((p1 - p0) * (k + 1)) / nP;
-    geo.quad(at(pf, l0, pierY), at(pf, l1, pierY), add(at(pf, l1, pierY), scale(pf.f, 420)), add(at(pf, l0, pierY), scale(pf.f, 420)), [0.4, 0.24, 0.18]);
-    if (k % 2 === 0) for (const side of [0, 420]) {
-      const q = add(at(pf, l0, pierY), scale(pf.f, side));
-      geo.cyl(add(q, [0, -500, 0]), q, 20, 20, 5, [0.2, 0.1, 0.12]);
-      if (k % 4 === 0) {
-        geo.cyl(q, add(q, [0, 380, 0]), 9, 7, 5, [0.15, 0.08, 0.15]);
-        lights.dot(add(q, [0, 400, 0]), k % 8 ? [1, 0.3, 0.8] : [0.2, 0.95, 1], 90);
-      }
-    }
-  }
-  geo.line(at(pf, p0, pierY + 5), at(pf, p1, pierY + 5), [1.8, 0.5, 1.4]);
-  geo.line(add(at(pf, p0, pierY + 5), scale(pf.f, 420)), add(at(pf, p1, pierY + 5), scale(pf.f, 420)), [1.8, 0.5, 1.4]);
-  const archC = add(at(pf, p1 - 150, pierY), scale(pf.f, 210));
-  for (let k = 0; k < 18; k++) {
-    const a0 = (k / 18) * Math.PI, a1 = ((k + 1) / 18) * Math.PI;
-    geo.line(add(archC, add(scale(pf.f, Math.cos(a0) * 320), [0, Math.sin(a0) * 480, 0])), add(archC, add(scale(pf.f, Math.cos(a1) * 320), [0, Math.sin(a1) * 480, 0])), [2.2, 0.4, 1.6]);
-  }
-
-  // sailboats with mast lights out at sea
-  for (let i = 0; i < Math.round(12 * density); i++) {
+  // sea stacks and a rock arch out in the ocean
+  for (let i = 0; i < Math.round(9 * density) + 2; i++) {
     const f = fr[Math.floor(rng() * fr.length)];
-    const base = at(f, SHORE + 5000 + rng() * 30000, seaY + 10);
-    sailboat(geo, base, rng);
-    lights.dot(add(base, [0, 1150, 0]), [1, 0.9, 0.7], 120, 0, 0);
+    const base = at(f, shore(f) + 2500 + rng() * 14000, seaY - 100);
+    const h = 900 + rng() * 2600;
+    let p = base;
+    const n = 4;
+    for (let k = 0; k < n; k++) {
+      const q = add(p, [(rng() - 0.5) * 120, h / n, (rng() - 0.5) * 120]);
+      geo.cyl(p, q, 420 - k * 60 + rng() * 80, 360 - k * 60, 7, mix([0.24, 0.13, 0.22], [0.36, 0.2, 0.28], rng()));
+      p = q;
+    }
+    geo.blob(p, 260, [0.3, 0.17, 0.25], 0, rng, 0.5);
+    if (rng() < 0.5) palm(geo, add(p, [0, 80, 0]), 500 + rng() * 300, rng, leafCols[Math.floor(rng() * 3)]);
   }
-
-  // the neon hotel you drop in from
-  const sp = map.spawn.pos, f0 = fr.find((f) => !f.ext) || fr[0];
-  const topY = sp[1] - 90;
-  const hw = 900;
-  // set back so the platform overhangs the front like a diving board
-  const hc = [sp[0] - f0.f[0] * (hw - 60), 0, sp[2] - f0.f[2] * (hw - 60)];
-  geo.box([hc[0], (seaY + topY) / 2, hc[2]], [hw * 2, topY - seaY, hw * 2], Math.atan2(f0.f[0], f0.f[2]), [0.12, 0.06, 0.16]);
-  for (let y = seaY + 400; y < topY; y += 420) {
-    const yaw = Math.atan2(f0.f[0], f0.f[2]);
-    const cs = Math.cos(yaw), sn = Math.sin(yaw);
-    const corner = (x, z) => [hc[0] + x * cs + z * sn, y, hc[2] - x * sn + z * cs];
-    const c = (y / 420) % 2 < 1 ? [1.6, 0.4, 1.3] : [0.4, 1.4, 1.7];
-    const pts = [corner(-hw - 5, -hw - 5), corner(hw + 5, -hw - 5), corner(hw + 5, hw + 5), corner(-hw - 5, hw + 5)];
-    for (let k = 0; k < 4; k++) geo.line(pts[k], pts[(k + 1) % 4], c);
-    for (let k = 0; k < 6; k++) lights.dot(mix(pts[0], pts[1], (k + 0.5) / 6), [1, 0.85, 0.6], 50, 0, 0);
+  const af = fr[Math.floor(fr.length * 0.55)];
+  const ac = at(af, shore(af) + 6000, seaY - 100);
+  for (let k = 0; k < 16; k++) {
+    const a0 = (k / 16) * Math.PI, a1 = ((k + 1) / 16) * Math.PI;
+    const p0 = add(ac, add(scale(af.f, Math.cos(a0) * 1800), [0, Math.sin(a0) * 2200, 0]));
+    const p1 = add(ac, add(scale(af.f, Math.cos(a1) * 1800), [0, Math.sin(a1) * 2200, 0]));
+    geo.cyl(p0, p1, 380, 380, 6, [0.32, 0.18, 0.26]);
   }
-  group.add(textSign('HOTEL', [hc[0] - f0.f[0] * (hw + 20), topY - 500, hc[2] - f0.f[2] * (hw + 20)], { p: [hc[0] - f0.f[0] * 9000, 0, hc[2] - f0.f[2] * 9000] }, 1500, 330, '#ff3ad8', '#ffe14d'));
 
   // rolling surf along the shore
-  group.add(surfZone(fr, SHORE, seaY));
+  group.add(surfZone(fr, shore, seaY));
 
-  const mat = propMaterial({ dir: [0, 0.35, -1], color: [0.75, 0.42, 0.42], ambient: [0.42, 0.26, 0.4] });
+  const mat = propMaterial({ dir: [0, 0.35, -1], color: [0.75, 0.42, 0.42], ambient: [0.45, 0.28, 0.42] });
   finish(group, geo, mat);
-  finishLights(group, lights);
   (group.userData.mats ??= []).push(group.children.find((c) => c.userData.surf)?.material);
   group.userData.mats = group.userData.mats.filter(Boolean);
-
-  // signs: neon title by the start, retro billboards along the road
-  const s0 = fr[Math.min(fr.length - 1, 30)];
-  group.add(textSign('VAPOR COAST', at(s0, -(W(s0) + 3300), seaY + 1300), s0, 3600, 720, '#ff3ad8', '#00f0ff'));
-  for (const k of [0.35, 0.75]) {
-    const sb = fr[Math.floor(fr.length * k)];
-    group.add(billboard(at(sb, -(W(sb) + 5600), seaY + 1800), sb, 2600, 1300));
-  }
   return group;
 }
 
@@ -581,7 +537,8 @@ function surfZone(fr, shore, seaY) {
   const D = 2200;
   for (let i = 0; i < fr.length - 1; i++) {
     const a = fr[i], b = fr[i + 1];
-    const A0 = at(a, shore - 250, seaY + 6), A1 = at(a, shore + D, seaY + 6), B0 = at(b, shore - 250, seaY + 6), B1 = at(b, shore + D, seaY + 6);
+    const sa = typeof shore === 'function' ? shore(a) : shore, sb = typeof shore === 'function' ? shore(b) : shore;
+    const A0 = at(a, sa - 250, seaY + 6), A1 = at(a, sa + D, seaY + 6), B0 = at(b, sb - 250, seaY + 6), B1 = at(b, sb + D, seaY + 6);
     pos.push(...A0, ...A1, ...B1, ...A0, ...B1, ...B0);
     dist.push(-250, D, D, -250, D, -250);
     flow.push(a.s, a.s, b.s, a.s, b.s, b.s);
@@ -616,49 +573,9 @@ function surfZone(fr, shore, seaY) {
   return mesh;
 }
 
-function beachShop(geo, base, yaw, rng) {
-  const cols = [NEON_PINK, NEON_CYAN, NEON_YEL, NEON_GREEN];
-  const c = cols[Math.floor(rng() * cols.length)];
-  geo.box(add(base, [0, 220, 0]), [700, 440, 450], yaw, [0.35, 0.2, 0.32]);
-  geo.box(add(base, [0, 470, 0]), [800, 40, 560], yaw, [0.2, 0.1, 0.18]);
-  const cs = Math.cos(yaw), sn = Math.sin(yaw);
-  const L = (x, y, z) => add(base, [x * cs + z * sn, y, -x * sn + z * cs]);
-  geo.line(L(-400, 445, 280), L(400, 445, 280), scale(c, 1.8));
-  geo.line(L(-400, 445, -280), L(400, 445, -280), scale(c, 1.8));
-  geo.box(L(0, 300, 228), [500, 160, 6], yaw, scale(c, 0.6), 0.9);
-}
 
-function umbrella(geo, base, rng) {
-  const cols = [NEON_PINK, NEON_CYAN, NEON_YEL, [1, 0.5, 0.2]];
-  const c = cols[Math.floor(rng() * cols.length)];
-  const top = add(base, [0, 260, 0]);
-  geo.cyl(base, top, 6, 6, 4, [0.9, 0.9, 0.9]);
-  const n = 8, r = 190;
-  for (let k = 0; k < n; k++) {
-    const a0 = (k / n) * Math.PI * 2, a1 = ((k + 1) / n) * Math.PI * 2;
-    geo.tri(add(top, [0, 40, 0]), add(top, [Math.cos(a0) * r, -50, Math.sin(a0) * r]), add(top, [Math.cos(a1) * r, -50, Math.sin(a1) * r]), k % 2 ? c : [1, 0.95, 0.95], k % 2 ? c : [1, 0.95, 0.95], k % 2 ? c : [1, 0.95, 0.95], 0.25);
-  }
-  const ta = rng() * Math.PI;
-  geo.box(add(base, [Math.cos(ta) * 200, 3, Math.sin(ta) * 200]), [140, 4, 280], ta, cols[Math.floor(rng() * cols.length)], 0.15);
-}
 
-function surfboard(geo, base, rng) {
-  const cols = [NEON_PINK, NEON_CYAN, NEON_YEL];
-  const c = cols[Math.floor(rng() * cols.length)];
-  const yaw = rng() * Math.PI;
-  geo.box(add(base, [0, 130, 0]), [70, 260, 12], yaw, [0.95, 0.9, 0.9]);
-  geo.box(add(base, [0, 130, 0]), [20, 250, 14], yaw, c, 0.8);
-}
 
-function sailboat(geo, base, rng) {
-  const yaw = rng() * Math.PI * 2;
-  geo.box(add(base, [0, 40, 0]), [160, 80, 520], yaw, [0.3, 0.2, 0.3]);
-  const cs = Math.cos(yaw), sn = Math.sin(yaw);
-  const L = (x, y, z) => add(base, [x * cs + z * sn, y, -x * sn + z * cs]);
-  geo.cyl(L(0, 80, 0), L(0, 1150, 0), 8, 6, 4, [0.8, 0.8, 0.8]);
-  geo.tri(L(0, 1100, 0), L(0, 150, 0), L(0, 150, 260), [0.95, 0.85, 0.9], [0.95, 0.85, 0.9], [0.95, 0.85, 0.9], 0.2);
-  geo.tri(L(0, 950, 0), L(0, 150, 0), L(0, 150, -220), [0.9, 0.6, 0.8], [0.9, 0.6, 0.8], [0.9, 0.6, 0.8], 0.2);
-}
 
 function palm(geo, base, h, rng, leafCol) {
   const lean = [(rng() - 0.5) * 0.5, 0, (rng() - 0.5) * 0.5];
@@ -706,32 +623,7 @@ function palm(geo, base, h, rng, leafCol) {
   for (let k = 0; k < 3; k++) geo.blob(add(top, [(rng() - 0.5) * 40, -30, (rng() - 0.5) * 40]), 16, [1.0, 0.45, 0.2], 0.8, rng);
 }
 
-function lifeguardTower(geo, base, yaw, rng) {
-  const legs = [[-120, -120], [120, -120], [120, 120], [-120, 120]];
-  for (const [x, z] of legs) geo.cyl(add(base, [x, 0, z]), add(base, [x * 0.7, 420, z * 0.7]), 10, 10, 4, [0.85, 0.85, 0.9]);
-  geo.box(add(base, [0, 470, 0]), [260, 120, 260], yaw, [0.9, 0.25, 0.35]);
-  geo.box(add(base, [0, 560, 0]), [300, 20, 300], yaw, [0.95, 0.95, 1.0]);
-  geo.box(add(base, [0, 700, 0]), [6, 260, 6], 0, [0.9, 0.9, 0.9]);
-  geo.box(add(base, [50, 790, 0]), [100, 60, 4], 0, NEON_PINK, 1);
-  geo.line(add(base, [-130, 410, -130]), add(base, [130, 410, -130]), [2, 0.5, 1.5]);
-}
 
-function vintageCar(geo, p, yaw) {
-  const body = [0.55, 0.12, 0.45];
-  geo.box(add(p, [0, 70, 0]), [170, 60, 420], yaw, body);
-  geo.box(add(p, [0, 125, -20]), [150, 55, 210], yaw, [0.25, 0.08, 0.25]);
-  const cs = Math.cos(yaw), sn = Math.sin(yaw);
-  const local = (x, y, z) => add(p, [x * cs + z * sn, y, -x * sn + z * cs]);
-  for (const [x, z] of [[-90, -140], [90, -140], [-90, 140], [90, 140]]) {
-    geo.cyl(local(x - 15, 40, z), local(x + 15, 40, z), 38, 38, 8, [0.05, 0.05, 0.07]);
-  }
-  for (const x of [-60, 60]) {
-    geo.box(local(x, 80, 212), [40, 22, 6], yaw, [1, 0.1, 0.15], 1);
-    geo.box(local(x, 80, -212), [40, 22, 6], yaw, [1, 0.95, 0.7], 1);
-  }
-  geo.line(local(-86, 100, -210), local(-86, 100, 210), [2, 0.4, 1.6]);
-  geo.line(local(86, 100, -210), local(86, 100, 210), [2, 0.4, 1.6]);
-}
 
 function canvasPlane(draw, wpx, hpx, wWorld, hWorld) {
   const c = document.createElement('canvas');
@@ -768,36 +660,6 @@ function textSign(text, pos, f, w, h, colA, colB) {
   return g;
 }
 
-function billboard(pos, f, w, h) {
-  const g = new THREE.Group();
-  const plane = canvasPlane((ctx, W, H) => {
-    const grd = ctx.createLinearGradient(0, 0, 0, H);
-    grd.addColorStop(0, '#1a0638'); grd.addColorStop(0.55, '#ff3a8c'); grd.addColorStop(1, '#ffb347');
-    ctx.fillStyle = grd; ctx.fillRect(0, 0, W, H);
-    // sun with stripes
-    ctx.fillStyle = '#ffe14d';
-    ctx.beginPath(); ctx.arc(W * 0.3, H * 0.62, H * 0.3, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#ff3a8c';
-    for (let i = 0; i < 6; i++) ctx.fillRect(0, H * 0.62 + i * H * 0.05, W * 0.6, H * 0.018 + i * 2);
-    ctx.font = `900 ${Math.floor(H * 0.17)}px Orbitron, sans-serif`;
-    ctx.fillStyle = '#fff'; ctx.shadowColor = '#00f0ff'; ctx.shadowBlur = 20;
-    ctx.fillText('SLIPSTREAM', W * 0.48, H * 0.3);
-    ctx.font = `700 ${Math.floor(H * 0.09)}px Orbitron, sans-serif`;
-    ctx.fillText('FM 88.7 · NEON NIGHTS', W * 0.5, H * 0.48);
-    ctx.strokeStyle = '#00f0ff'; ctx.lineWidth = 10; ctx.strokeRect(5, 5, W - 10, H - 10);
-  }, 1024, 512, w, h);
-  g.add(plane);
-  const legGeo = new THREE.BoxGeometry(60, 1600, 60);
-  const legMat = new THREE.MeshBasicMaterial({ color: 0x140818, fog: true });
-  for (const x of [-w * 0.35, w * 0.35]) {
-    const leg = new THREE.Mesh(legGeo, legMat);
-    leg.position.set(x, -h / 2 - 800, -20);
-    g.add(leg);
-  }
-  g.position.set(...pos);
-  faceToward(g, f, pos);
-  return g;
-}
 
 // ----------------------------------------------------------------- canyon
 
