@@ -54,7 +54,7 @@ Start with **First Wave**, the tutorial map. It shows hints at each stage.
 - **Exact collision:** ramps are convex brushes. Box traces use the brush's
   Minkowski sum with the player box (face, axis and edge-bevel planes), so you
   don't snag on seams between ramp segments.
-- **Eleven continuous momentum maps.** None of them teleport you, so you
+- **Thirteen continuous momentum maps.** None of them teleport you, so you
   never lose speed between sections. Each starts with a steep drop-in that
   flattens out, so you start with speed. There are no checkpoints: fall and
   the run restarts from the top. Five maps are **earned** by finishing others.
@@ -67,11 +67,13 @@ Start with **First Wave**, the tutorial map. It shows hints at each stage.
   | Canyon Run | medium | real rock canyon at night: strata walls, arches, mesas, neon cacti, tumbleweeds, huge moon | open |
   | Overclock | hard | open sky, thin ramps, 2 fast lines | open |
   | Data Core | hard | server farm: LED racks, cable trays, data pulses | open |
-  | Skyline Rush | medium | real city at night: towers on blocks, rooftop neon, beacons, street traffic, distant skyline | finish Neon Drift |
-  | Vapor Coast | easy | neo beach: drop in from a hotel rooftop, then skim low over sand, umbrellas, palms, boardwalk shops, road traffic, pier and open ocean to the horizon | finish Night Tunnel |
+  | Skyline Rush | medium | real city at night: every block built up, rooftop neon, beacons, street traffic, distant skyline | finish Neon Drift |
+  | Vapor Coast | easy | wild empty beach: rocky headland start, dunes down to the sea, palm clusters, sea stacks, rock arch, open ocean | finish Night Tunnel |
   | Crystal Cave | medium | natural rock cave: stalactites, crystal clusters, underground river | finish Canyon Run |
   | Orbital | hard | space station: panelled corridors, scaffolds, solar arrays, giant ring station, lower gravity | finish Overclock |
-  | Final Overdrive | expert | everything: open, canyon, tunnel, 3 fast lines | finish Data Core, Orbital and Crystal Cave |
+  | Lost Temple | medium | night jungle: giant trees, vines, river, waterfall, ruins, stepped temple, fireflies | finish Vapor Coast |
+| Magma Run | hard | erupting volcano: lava rivers, sea of magma, embers, obsidian spikes, volcanic sky | finish Skyline Rush |
+| Final Overdrive | expert | warp tunnel of light rings through deep space, raw speed, 3 fast lines | finish Data Core, Orbital and Crystal Cave |
 - **Fast lines:** at some gaps, a long jump straight ahead lands directly on a
   later ramp, but only if you're carrying enough speed. Slower riders take a
   safe detour to the side.
@@ -161,7 +163,7 @@ Rules of thumb the bot tests taught us:
 - Add a gentle run-out after steep ramps.
 - Widen turns for fast sections. A radius of about v²/650 is comfortable.
 
-Themed scenery (`theme: { type: 'beach' | 'canyon' | 'cave' | 'city' | 'station' | 'servers' }`) is generated
+Themed scenery (`theme: { type: 'beach' | 'canyon' | 'cave' | 'city' | 'station' | 'servers' | 'jungle' | 'volcano' | 'vortex' }`) is generated
 procedurally around the course in `src/render/scenery.js`: low-poly rock and
 terrain plus props. It is decoration only. On these maps you collide with a
 smooth hidden shell set just inside the rough rock, so bumps never scrub

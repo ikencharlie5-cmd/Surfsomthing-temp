@@ -242,6 +242,9 @@ export function buildTheme(map, quality = 'high') {
   if (t.type === 'city') return buildCity(map, t, density);
   if (t.type === 'station') return buildStation(map, t, density);
   if (t.type === 'servers') return buildServers(map, t, density);
+  if (t.type === 'jungle') return buildJungle(map, t, density);
+  if (t.type === 'volcano') return buildVolcano(map, t, density);
+  if (t.type === 'vortex') return buildVortex(map, t, density);
   return null;
 }
 
@@ -1251,6 +1254,396 @@ function buildServers(map, t, density) {
     lights.flow(at(a, side * sa.L * 0.6, sa.top - 60), at(b, side * sb.L * 0.6, sb.top - 60), col, 45, 0.6 + rng() * 0.8, rng());
   }
   const mat = propMaterial({ dir: [0, -1, 0], color: [0.1, 0.2, 0.15], ambient: [0.06, 0.08, 0.08], lamp: 0.8, lampColor: [0.6, 1.0, 0.85] });
+  finish(group, geo, mat);
+  finishLights(group, lights);
+  return group;
+}
+
+// ---------------------------------------------------------------------------
+// Shared helpers for terrain themes
+// ---------------------------------------------------------------------------
+
+/** Horizontal distance from (x,z) to the guide line (and the line height there). */
+function lineDist(line, x, z) {
+  let best = Infinity, y = 0;
+  for (let i = 0; i < line.length - 1; i++) {
+    const a = line[i].p, b = line[i + 1].p;
+    const dx = b[0] - a[0], dz = b[2] - a[2];
+    const l2 = dx * dx + dz * dz || 1;
+    const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[2]) * dz) / l2));
+    const d = Math.hypot(x - (a[0] + dx * t), z - (a[2] + dz * t));
+    if (d < best) { best = d; y = a[1] + (b[1] - a[1]) * t; }
+  }
+  return { d: best, y };
+}
+
+function profileY(pts, lat) {
+  for (let i = 0; i < pts.length - 1; i++) {
+    if (lat >= pts[i][0] && lat <= pts[i + 1][0]) {
+      const k = (lat - pts[i][0]) / (pts[i + 1][0] - pts[i][0] || 1);
+      return pts[i][1] + (pts[i + 1][1] - pts[i][1]) * k;
+    }
+  }
+  return pts[lat < pts[0][0] ? 0 : pts.length - 1][1];
+}
+
+function flowStrip(fr, latA, latB, yFn, material) {
+  const pos = [], flow = [];
+  for (let i = 0; i < fr.length - 1; i++) {
+    const a = fr[i], b = fr[i + 1];
+    const A0 = at(a, latA(a), yFn(a)), A1 = at(a, latB(a), yFn(a)), B0 = at(b, latA(b), yFn(b)), B1 = at(b, latB(b), yFn(b));
+    pos.push(...A0, ...A1, ...B1, ...A0, ...B1, ...B0);
+    flow.push(a.s, a.s, b.s, a.s, b.s, b.s);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('aFlow', new THREE.Float32BufferAttribute(flow, 1));
+  const m = new THREE.Mesh(g, material);
+  m.frustumCulled = false;
+  return m;
+}
+
+function lavaMaterial() {
+  return new THREE.ShaderMaterial({
+    uniforms: { uTime: { value: 0 }, uFogColor: { value: FOG_COLOR }, uFogNear: FOG_NEAR, uFogFar: FOG_FAR },
+    vertexShader: `attribute float aFlow; varying float vFlow; varying vec3 vW; varying float vDepth;
+      void main(){ vFlow = aFlow; vec4 w = modelMatrix*vec4(position,1.0); vW = w.xyz; vec4 mv = viewMatrix*w; vDepth = -mv.z; gl_Position = projectionMatrix*mv; }`,
+    fragmentShader: `uniform float uTime; uniform vec3 uFogColor; uniform float uFogNear; uniform float uFogFar;
+      varying float vFlow; varying vec3 vW; varying float vDepth;
+      float h(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
+      float n(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
+        return mix(mix(h(i),h(i+vec2(1,0)),f.x), mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x), f.y); }
+      void main(){
+        vec2 p = vec2(vW.x, vW.z) / 900.0 + vec2(0.0, -uTime * 0.12);
+        float crust = n(p * 2.0 + vec2(vFlow * 0.0004 - uTime * 0.2, 0.0)) * 0.6 + n(p * 5.0) * 0.4;
+        float hot = smoothstep(0.35, 0.75, crust);
+        vec3 c = mix(vec3(0.08, 0.02, 0.02), vec3(1.6, 0.45, 0.08), hot);
+        c += vec3(1.4, 0.9, 0.3) * smoothstep(0.82, 0.95, crust);
+        c *= 0.8 + 0.2 * sin(uTime * 2.0 + vW.x * 0.002);
+        gl_FragColor = vec4(mix(c, uFogColor, smoothstep(uFogNear, uFogFar * 1.4, vDepth) * 0.7), 1.0);
+      }`,
+  });
+}
+
+// ----------------------------------------------------------------- jungle
+
+const LEAF = [[0.03, 0.16, 0.07], [0.04, 0.2, 0.1], [0.02, 0.12, 0.08]];
+const STONE = [0.2, 0.24, 0.2];
+
+function buildJungle(map, t, density) {
+  const group = new THREE.Group();
+  const geo = new Geo();
+  const lights = new Lights();
+  const rng = rand(t.seed || 41);
+  const line = map.line;
+  const fr = extendFrames(frames(line, 320), 6000, 12000, 320);
+  const drop = t.groundDrop ?? 900;
+  const W = (f) => f.e.width;
+  const L = (f) => f.p[1] - f.e.height - drop;
+  const prof = (f) => {
+    const g = L(f), w = W(f);
+    return [[-(w + 16000), g + 3800], [-(w + 8000), g + 1800], [-(w + 3500), g + 350], [-(w + 1200), g + 40], [-w * 0.35, g - 40], [0, g - 140],
+      [w * 0.35, g - 40], [w + 1200, g + 40], [w + 3500, g + 350], [w + 8000, g + 1800], [w + 16000, g + 3800]];
+  };
+  strip(geo, fr, (f) => prof(f).map(([l, y]) => [l, y, 0, 1]), {
+    displace: (p, j) => (j <= 2 || j >= 8 ? (fbm3(p[0] / 3000, 0, p[2] / 3000, 3) - 0.4) * 1800 : (fbm3(p[0] / 600, 0, p[2] / 600, 2) - 0.5) * 120),
+    color: (p, j) => (j <= 2 || j >= 8 ? mix([0.02, 0.1, 0.05], [0.04, 0.16, 0.08], fbm3(p[0] / 2000, 0, p[2] / 2000)) : mix([0.08, 0.07, 0.04], [0.05, 0.12, 0.05], fbm3(p[0] / 500, 0, p[2] / 500))),
+  });
+  // river along the valley floor
+  const river = flowStrip(fr, (f) => -W(f) * 0.42, (f) => W(f) * 0.42, (f) => L(f) - 90, waterMaterial([0.0, 0.06, 0.05], [0.1, 0.8, 0.55]));
+  group.add(river);
+
+  const clearOf = (x, z, r, top) => {
+    const n = lineDist(line, x, z);
+    return n.d > 520 + r + 260 || top < n.y - 400 - drop * 0.4;
+  };
+  // giant trees with canopies, hanging vines and glowing spots
+  const nTrees = Math.round(fr.length * 2.2 * density);
+  for (let i = 0; i < nTrees; i++) {
+    const f = fr[Math.floor(rng() * fr.length)];
+    const side = rng() < 0.5 ? -1 : 1;
+    const lat = side * (W(f) + 700 + rng() * 7500);
+    const base = at(f, lat, 0);
+    base[1] = profileY(prof(f), lat) - 30;
+    const h = 1400 + rng() * 2600, cr = 450 + rng() * 650;
+    if (!clearOf(base[0], base[2], cr, base[1] + h + cr)) continue;
+    jungleTree(geo, lights, base, h, cr, rng);
+  }
+  // ferns, glowing mushrooms and neon flowers on the floor
+  for (let i = 0; i < Math.round(fr.length * 3 * density); i++) {
+    const f = fr[Math.floor(rng() * fr.length)];
+    const lat = (rng() < 0.5 ? -1 : 1) * (W(f) * 0.5 + rng() * 4000);
+    const base = at(f, lat, 0); base[1] = profileY(prof(f), lat) - 10;
+    const k = rng();
+    if (k < 0.5) fern(geo, base, 160 + rng() * 260, rng);
+    else if (k < 0.8) mushroom(geo, base, 50 + rng() * 120, rng);
+    else geo.blob(add(base, [0, 30, 0]), 25 + rng() * 25, [[1, 0.3, 0.8], [0.3, 0.9, 1], [1, 0.8, 0.2]][Math.floor(rng() * 3)], 0.9, rng);
+  }
+  // the temple: a stepped pyramid with glowing runes and torches
+  const tf = fr[Math.floor(fr.length * 0.45)];
+  const tl = -(W(tf) + 5200);
+  const tb = at(tf, tl, profileY(prof(tf), tl) - 50);
+  const yaw = Math.atan2(tf.f[0], tf.f[2]);
+  let size = 4200, y = tb[1];
+  for (let k = 0; k < 7; k++) {
+    const hgt = 480;
+    geo.box([tb[0], y + hgt / 2, tb[2]], [size, hgt, size], yaw, mix(STONE, [0.14, 0.18, 0.13], k % 2));
+    const cs = Math.cos(yaw), sn = Math.sin(yaw), hs = size / 2 + 4;
+    const c = (x, z) => [tb[0] + x * cs + z * sn, y + hgt * 0.55, tb[2] - x * sn + z * cs];
+    const pts = [c(-hs, -hs), c(hs, -hs), c(hs, hs), c(-hs, hs)];
+    for (let q = 0; q < 4; q++) geo.line(pts[q], pts[(q + 1) % 4], k % 2 ? [0.2, 1.4, 1.0] : [0.15, 0.6, 0.5]);
+    for (const pq of pts) lights.dot(add(pq, [0, 260, 0]), [1, 0.55, 0.15], 80, 6 + rng() * 3, rng());
+    y += hgt; size -= 520;
+  }
+  geo.box([tb[0], y + 380, tb[2]], [size * 0.8, 760, size * 0.8], yaw, [0.12, 0.15, 0.12]);
+  lights.dot([tb[0], y + 900, tb[2]], [0.2, 1, 0.7], 260, 0, 0);
+  // ruins: broken pillars and stone heads with glowing eyes
+  for (let i = 0; i < Math.round(26 * density); i++) {
+    const f = fr[Math.floor(rng() * fr.length)];
+    const lat = (rng() < 0.5 ? -1 : 1) * (W(f) + 900 + rng() * 4000);
+    const base = at(f, lat, profileY(prof(f), lat) - 20);
+    if (rng() < 0.6) {
+      const h = 300 + rng() * 900;
+      geo.cyl(base, add(base, [(rng() - 0.5) * 120, h, (rng() - 0.5) * 120]), 90, 80, 7, STONE);
+    } else {
+      const yw = rng() * Math.PI * 2;
+      geo.box(add(base, [0, 260, 0]), [380, 520, 340], yw, STONE);
+      geo.box(add(base, [0, 340, 0]), [400, 60, 360], yw, [0.15, 0.18, 0.15]);
+      const cs = Math.cos(yw), sn = Math.sin(yw);
+      for (const s of [-1, 1]) lights.dot(add(base, [s * 90 * cs + 172 * sn, 380, -s * 90 * sn + 172 * cs]), [0.2, 1, 0.6], 40, 0, 0);
+    }
+  }
+  // a waterfall pouring off the hills into a pool
+  const wf = fr[Math.floor(fr.length * 0.3)];
+  const wl = W(wf) + 4200, wtop = profileY(prof(wf), wl) + 2600, wbot = profileY(prof(wf), wl) - 60;
+  for (let k = 0; k < 18; k++) geo.blob(at(wf, wl + 700 + rng() * 900, wbot + rng() * (wtop - wbot)), 450 + rng() * 300, [0.08, 0.12, 0.09], 0, rng, 0.8);
+  const fallPos = [], fallFlow = [];
+  const fw = 520;
+  const A = add(at(wf, wl, wtop), scale(wf.f, -fw)), B = add(at(wf, wl, wtop), scale(wf.f, fw)), C = add(at(wf, wl, wbot), scale(wf.f, fw)), D = add(at(wf, wl, wbot), scale(wf.f, -fw));
+  fallPos.push(...A, ...B, ...C, ...A, ...C, ...D);
+  fallFlow.push(0, 0, 3000, 0, 3000, 3000);
+  const fg = new THREE.BufferGeometry();
+  fg.setAttribute('position', new THREE.Float32BufferAttribute(fallPos, 3));
+  fg.setAttribute('aFlow', new THREE.Float32BufferAttribute(fallFlow.map((v) => v * 4), 1));
+  const fm = waterMaterial([0.1, 0.3, 0.3], [0.6, 1.0, 0.95]);
+  fm.side = THREE.DoubleSide;
+  const fall = new THREE.Mesh(fg, fm);
+  fall.frustumCulled = false;
+  group.add(fall);
+  for (let k = 0; k < 40; k++) lights.flow(at(wf, wl - 200 - rng() * 600, wbot + 50), at(wf, wl - 400 - rng() * 800, wbot + 400 + rng() * 500), [0.7, 1, 1], 50, 0.4 + rng() * 0.5, rng());
+
+  // fireflies around the ride
+  for (let i = 0; i < Math.round(fr.length * 2 * density); i++) {
+    const f = fr[Math.floor(rng() * fr.length)];
+    const p = at(f, (rng() - 0.5) * 2 * (W(f) + 3000), f.p[1] - f.e.height + (rng() - 0.4) * 1800);
+    lights.dot(p, rng() < 0.7 ? [0.8, 1.0, 0.3] : [0.3, 1.0, 0.8], 30, 0.3 + rng() * 0.8, rng());
+  }
+
+  const mat = propMaterial({ dir: [-0.35, 0.32, -0.88], color: [0.35, 0.45, 0.6], ambient: [0.1, 0.16, 0.12], lamp: 0.45, lampColor: [0.6, 1.0, 0.7] });
+  finish(group, geo, mat);
+  finishLights(group, lights);
+  group.userData.mats.push(river.material, fm);
+  return group;
+}
+
+function jungleTree(geo, lights, base, h, cr, rng) {
+  const bark = [0.1, 0.07, 0.05];
+  const top = add(base, [(rng() - 0.5) * 300, h, (rng() - 0.5) * 300]);
+  geo.cyl(base, top, 70 + h * 0.025, 40, 6, bark);
+  for (let k = 0; k < 4; k++) {
+    const a = rng() * Math.PI * 2;
+    geo.cyl(add(base, [Math.cos(a) * 220, 0, Math.sin(a) * 220]), add(base, [0, 280, 0]), 40, 10, 4, bark);
+  }
+  const blobs = 3 + Math.floor(rng() * 3);
+  for (let k = 0; k < blobs; k++) {
+    const c = add(top, [(rng() - 0.5) * cr, (rng() - 0.3) * cr * 0.5, (rng() - 0.5) * cr]);
+    geo.blob(c, cr * (0.5 + rng() * 0.4), LEAF[Math.floor(rng() * LEAF.length)], 0.05, rng, 0.6);
+    // hanging vines
+    for (let v = 0; v < 3; v++) {
+      const vp = add(c, [(rng() - 0.5) * cr, -cr * 0.2, (rng() - 0.5) * cr]);
+      geo.line(vp, add(vp, [(rng() - 0.5) * 60, -(400 + rng() * 1200), (rng() - 0.5) * 60]), rng() < 0.3 ? [0.2, 0.9, 0.5] : [0.06, 0.3, 0.15]);
+    }
+  }
+  if (rng() < 0.5) lights.dot(add(base, [0, h * (0.2 + rng() * 0.5), 0]), [0.2, 1, 0.9], 35, 0, 0);
+}
+
+function fern(geo, base, size, rng) {
+  const n = 6 + Math.floor(rng() * 4);
+  for (let k = 0; k < n; k++) {
+    const a = (k / n) * Math.PI * 2 + rng() * 0.3;
+    const dir = [Math.cos(a), 0, Math.sin(a)];
+    const side = [-dir[2], 0, dir[0]];
+    const tip = add(base, [dir[0] * size, size * 0.35, dir[2] * size]);
+    const mid = add(base, [dir[0] * size * 0.5, size * 0.45, dir[2] * size * 0.5]);
+    geo.tri(base, add(mid, scale(side, size * 0.15)), tip, LEAF[1], LEAF[1], LEAF[1], 0.05, 0, 0.2, 0.4);
+    geo.tri(base, tip, add(mid, scale(side, -size * 0.15)), LEAF[0], LEAF[0], LEAF[0], 0.05, 0, 0.4, 0.2);
+  }
+}
+
+function mushroom(geo, base, size, rng) {
+  const col = [[1, 0.25, 0.8], [0.2, 0.9, 1], [0.6, 0.4, 1]][Math.floor(rng() * 3)];
+  const top = add(base, [0, size * 1.2, 0]);
+  geo.cyl(base, top, size * 0.15, size * 0.12, 5, [0.8, 0.8, 0.75], 0.2);
+  geo.cyl(add(top, [0, -size * 0.1, 0]), add(top, [0, size * 0.35, 0]), size * 0.7, 0, 7, col, 0.85);
+}
+
+// ----------------------------------------------------------------- volcano
+
+const BASALT = [0.07, 0.055, 0.06];
+
+function buildVolcano(map, t, density) {
+  const group = new THREE.Group();
+  const geo = new Geo();
+  const lights = new Lights();
+  const rng = rand(t.seed || 51);
+  const line = map.line;
+  const fr = extendFrames(frames(line, 320), 6000, 14000, 320);
+  // riders look left (open side): put the slope down to the lava sea there,
+  // and the mountainside behind the ramp
+  for (const f of fr) f.r = [-f.r[0], 0, -f.r[2]];
+  const drop = t.groundDrop ?? 800;
+  const W = (f) => f.e.width;
+  const G = (f) => f.p[1] - f.e.height - drop;
+  const lavaY = Math.min(...fr.map(G)) - 2600;
+  const prof = (f) => {
+    const g = G(f), w = W(f);
+    return [[-(w + 14000), g + 6000], [-(w + 6000), g + 2400], [-(w + 2500), g + 700], [-(w + 1000), g + 150], [0, g],
+      [w + 1200, g - 200], [w + 4500, Math.max(lavaY + 300, g - 1400)], [w + 9000, lavaY + 40], [w + 30000, lavaY - 50]];
+  };
+  strip(geo, fr, (f) => prof(f).map(([l, y]) => [l, y, 0, 1]), {
+    displace: (p, j) => (j <= 1 ? (fbm3(p[0] / 2500, 0, p[2] / 2500, 3) - 0.4) * 2400 : j >= 7 ? 0 : (fbm3(p[0] / 700, 0, p[2] / 700, 3) - 0.5) * 260),
+    color: (p) => mix(BASALT, [0.16, 0.1, 0.1], fbm3(p[0] / 900, p[1] / 600, p[2] / 900, 3)),
+  });
+  // glowing cracks in the rock
+  for (let i = 0; i < Math.round(fr.length * 2.5 * density); i++) {
+    const f = fr[Math.floor(rng() * fr.length)];
+    const lat = (rng() < 0.6 ? -1 : 1) * (W(f) + 400 + rng() * 4000);
+    let p = at(f, lat, profileY(prof(f), lat) + 8);
+    for (let k = 0; k < 4; k++) {
+      const q = add(p, [(rng() - 0.5) * 500, 0, (rng() - 0.5) * 500]);
+      q[1] = p[1] + (rng() - 0.5) * 40;
+      geo.line(p, q, [1.8, 0.45, 0.08]);
+      p = q;
+    }
+  }
+  // lava: a river channel beside the course and the lava sea below
+  const lm = lavaMaterial();
+  group.add(flowStrip(fr, (f) => W(f) + 2300, (f) => W(f) + 2950, (f) => profileY(prof(f), W(f) + 2600) + 30, lm));
+  const sea = flowStrip(fr, (f) => W(f) + 8000, (f) => W(f) + 60000, () => lavaY + 60, lm);
+  group.add(sea);
+  // basalt boulders and obsidian spikes
+  for (let i = 0; i < Math.round(fr.length * 1.4 * density); i++) {
+    const f = fr[Math.floor(rng() * fr.length)];
+    const lat = (rng() < 0.5 ? -1 : 1) * (W(f) + 700 + rng() * 5500);
+    const base = at(f, lat, profileY(prof(f), lat));
+    if (lineDist(line, base[0], base[2]).d < W(f) + 900) continue;
+    if (rng() < 0.55) geo.blob(add(base, [0, 40, 0]), 120 + rng() * 360, mix(BASALT, [0.14, 0.08, 0.1], rng()), 0, rng, 0.7);
+    else {
+      const h = 300 + rng() * 1100;
+      const tip = add(base, [(rng() - 0.5) * 200, h, (rng() - 0.5) * 200]);
+      geo.cyl(base, tip, 70 + rng() * 80, 0, 5, [0.12, 0.05, 0.14]);
+      geo.line(base, tip, [1.2, 0.3, 1.4]);
+    }
+  }
+  // the volcano itself behind the start, glowing crater and eruption
+  const f0 = fr.find((f) => !f.ext) || fr[0];
+  const sp = map.spawn.pos;
+  const vc = [sp[0] - f0.f[0] * 16000, 0, sp[2] - f0.f[2] * 16000];
+  const peak = sp[1] + 7000;
+  const ringR = (y) => 2200 + (peak - y) * 1.6;
+  const levels = 9, segs = 24;
+  let prev = null;
+  for (let l = 0; l <= levels; l++) {
+    const y = lavaY + ((peak - lavaY) * l) / levels;
+    const ring = [];
+    for (let k = 0; k < segs; k++) {
+      const a = (k / segs) * Math.PI * 2;
+      const r = ringR(y) * (0.85 + rng() * 0.3);
+      ring.push([vc[0] + Math.cos(a) * r, y + (rng() - 0.5) * 200, vc[2] + Math.sin(a) * r]);
+    }
+    if (prev) for (let k = 0; k < segs; k++) {
+      const k2 = (k + 1) % segs;
+      const col = mix(BASALT, [0.15, 0.08, 0.09], rng());
+      geo.quad(prev[k], prev[k2], ring[k2], ring[k], col);
+    }
+    prev = ring;
+  }
+  const crater = [];
+  for (let k = 0; k < segs; k++) crater.push(prev[k]);
+  for (let k = 0; k < segs; k++) geo.tri(crater[k], crater[(k + 1) % segs], [vc[0], peak - 300, vc[2]], [1.4, 0.4, 0.06], [1.4, 0.4, 0.06], [1.6, 0.8, 0.2], 1);
+  for (let k = 0; k < 60; k++) {
+    const a = rng() * Math.PI * 2, r = rng() * 1500;
+    const s = [vc[0] + Math.cos(a) * r, peak, vc[2] + Math.sin(a) * r];
+    lights.flow(s, add(s, [(rng() - 0.5) * 3000, 3000 + rng() * 6000, (rng() - 0.5) * 3000]), [1, 0.45, 0.1], 160, 0.15 + rng() * 0.25, rng());
+  }
+  // lava streams down the volcano's flank
+  for (let k = 0; k < 5; k++) {
+    const a = rng() * Math.PI * 2;
+    let p = [vc[0] + Math.cos(a) * ringR(peak), peak - 100, vc[2] + Math.sin(a) * ringR(peak)];
+    for (let s = 0; s < 8; s++) {
+      const y = peak - ((peak - lavaY) * (s + 1)) / 8;
+      const q = [vc[0] + Math.cos(a + (rng() - 0.5) * 0.15) * ringR(y), y, vc[2] + Math.sin(a + (rng() - 0.5) * 0.15) * ringR(y)];
+      geo.cyl(p, q, 180, 180, 5, [1.3, 0.35, 0.05], 1);
+      p = q;
+    }
+  }
+  // embers rising everywhere
+  for (let i = 0; i < Math.round(fr.length * 1.8 * density); i++) {
+    const f = fr[Math.floor(rng() * fr.length)];
+    const s = at(f, (rng() - 0.5) * 2 * (W(f) + 5000), G(f) + (rng() - 0.5) * 400);
+    lights.flow(s, add(s, [(rng() - 0.5) * 600, 1500 + rng() * 2500, (rng() - 0.5) * 600]), rng() < 0.7 ? [1, 0.4, 0.08] : [1, 0.75, 0.3], 26, 0.1 + rng() * 0.2, rng());
+  }
+  const mat = propMaterial({ dir: [0.2, 0.3, -0.9], color: [0.9, 0.35, 0.15], ambient: [0.16, 0.07, 0.07], lamp: 0.3, lampColor: [1, 0.5, 0.25] });
+  finish(group, geo, mat);
+  finishLights(group, lights);
+  group.userData.mats.push(lm);
+  return group;
+}
+
+// ----------------------------------------------------------------- vortex (finale)
+
+function buildVortex(map, t, density) {
+  const group = new THREE.Group();
+  const geo = new Geo();
+  const lights = new Lights();
+  const rng = rand(t.seed || 61);
+  const fr = extendFrames(frames(map.line, 300), 4000, 14000, 300);
+  const hue = (k) => {
+    const cols = [[1.0, 0.2, 0.8], [0.6, 0.3, 1.0], [0.1, 0.9, 1.0], [1.0, 0.85, 0.3]];
+    const i = Math.floor(k) % cols.length, j = (i + 1) % cols.length;
+    return mix(cols[i], cols[j], k - Math.floor(k));
+  };
+  const centre = (f) => at(f, 0, f.p[1] - f.e.height * 0.4);
+  const ringAt = (f, R, col, segs = 28) => {
+    const c = centre(f);
+    let prev = null;
+    for (let k = 0; k <= segs; k++) {
+      const a = (k / segs) * Math.PI * 2;
+      const p = add(c, add(scale(f.r, Math.cos(a) * R), [0, Math.sin(a) * R, 0]));
+      if (prev) geo.line(prev, p, col);
+      prev = p;
+    }
+  };
+  // the tunnel of rings you race through
+  for (let i = 0; i < fr.length; i += 4) {
+    const f = fr[i];
+    const R = 2800 + Math.sin(i * 0.11) * 500;
+    const extEnd = f.ext && i > fr.length / 2;
+    ringAt(f, extEnd ? R * Math.max(0.15, 1 - (i - fr.length + 47) / 47) : R, scale(hue(i * 0.02), f.ext ? 2.2 : 1.4));
+  }
+  // warp streaks racing past
+  for (let i = 0; i < Math.round(340 * density); i++) {
+    const k = Math.floor(rng() * (fr.length - 16));
+    const a = fr[k], b = fr[k + 16];
+    const ang = rng() * Math.PI * 2, R = 1800 + rng() * 1600;
+    const off = (f) => add(centre(f), add(scale(f.r, Math.cos(ang) * R), [0, Math.sin(ang) * R, 0]));
+    lights.flow(off(a), off(b), hue(rng() * 4), 40, 0.5 + rng() * 0.9, rng());
+  }
+  // a blazing core at the end of the vortex
+  const last = fr[fr.length - 1];
+  geo.blob(centre(last), 1400, [1.6, 1.0, 1.8], 1, rng);
+  for (let k = 0; k < 60; k++) lights.dot(add(centre(last), [(rng() - 0.5) * 5000, (rng() - 0.5) * 5000, (rng() - 0.5) * 5000]), hue(rng() * 4), 200, 1 + rng() * 3, rng());
+  const mat = propMaterial({ dir: [0, 1, 0], color: [0.3, 0.3, 0.4], ambient: [0.2, 0.2, 0.3] });
   finish(group, geo, mat);
   finishLights(group, lights);
   return group;

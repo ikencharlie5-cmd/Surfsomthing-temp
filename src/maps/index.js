@@ -8,11 +8,13 @@ import skylineRush from './skyline-rush.js';
 import vaporCoast from './vapor-coast.js';
 import crystalCave from './crystal-cave.js';
 import orbital from './orbital.js';
+import lostTemple from './lost-temple.js';
+import magmaRun from './magma-run.js';
 import finalOverdrive from './final-overdrive.js';
 
 export const MAPS = [
   tutorial, neonDrift, nightTunnel, canyonRun, overclock, dataCore,
-  skylineRush, vaporCoast, crystalCave, orbital, finalOverdrive,
+  skylineRush, vaporCoast, crystalCave, orbital, lostTemple, magmaRun, finalOverdrive,
 ].map((f) => f());
 export const getMap = (id) => MAPS.find((m) => m.id === id);
 

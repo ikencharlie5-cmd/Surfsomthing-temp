@@ -503,10 +503,49 @@ function nearLine(line, x, z) {
  * Neon city: towers on both sides of the course. They're solid (you can
  * crash into one if you fly way off line) but kept clear of the ride.
  */
-export function addCity(m, { seed = 1, spacing = 1500, clear = 1700, streetY = null, grid = 0, colors = [COLORS.cyan, COLORS.magenta, COLORS.yellow, COLORS.purple] } = {}) {
+export function addCity(m, { seed = 1, spacing = 1500, clear = 1700, streetY = null, grid = 0, fill = 12000, colors = [COLORS.cyan, COLORS.magenta, COLORS.yellow, COLORS.purple] } = {}) {
   const taken = new Set();
   const r = rng(seed);
   const line = m.line;
+  if (grid && streetY != null) {
+    // Fill every city block near the course. Blocks under or beside the
+    // ride get low-rise buildings that stay below the ramps; everything
+    // else gets towers. Some blocks are split into two lots.
+    const xs = line.map((e) => e.p[0]), zs = line.map((e) => e.p[2]);
+    const x0 = Math.floor((Math.min(...xs) - fill) / grid), x1 = Math.ceil((Math.max(...xs) + fill) / grid);
+    const z0 = Math.floor((Math.min(...zs) - fill) / grid), z1 = Math.ceil((Math.max(...zs) + fill) / grid);
+    const lot = grid - 650; // leave room for the roads
+    for (let gx = x0; gx < x1; gx++) for (let gz = z0; gz < z1; gz++) {
+      const bx = (gx + 0.5) * grid, bz = (gz + 0.5) * grid;
+      if (nearLine(line, bx, bz).d > fill) continue;
+      const lots = [];
+      if (r() < 0.35) {
+        const alongX = r() < 0.5;
+        for (const s of [-1, 1]) {
+          lots.push(alongX ? [bx + s * lot / 4, bz, lot / 2 - 120, lot * (0.6 + r() * 0.35)] : [bx, bz + s * lot / 4, lot * (0.6 + r() * 0.35), lot / 2 - 120]);
+        }
+      } else {
+        lots.push([bx, bz, lot * (0.55 + r() * 0.4), lot * (0.55 + r() * 0.4)]);
+      }
+      for (const [cx, cz, sx, sz] of lots) {
+        const n = nearLine(line, cx, cz);
+        const lowCap = n.y - 400 - 900; // safely under the ramps
+        let top;
+        if (n.d < clear + Math.max(sx, sz) * 0.75) {
+          if (lowCap - streetY < 500) continue;
+          top = streetY + (lowCap - streetY) * (0.35 + r() * 0.65);
+        } else {
+          const far = Math.min(1, n.d / fill);
+          top = r() < 0.5 ? n.y + 400 + r() * (2500 + 3500 * far) : Math.max(streetY + 600, n.y - 1200 + r() * 1800);
+        }
+        m.brushes.push({
+          points: [[-1, -1], [-1, 1], [1, -1], [1, 1]].flatMap(([u, v]) => [[cx + u * sx / 2, streetY, cz + v * sz / 2], [cx + u * sx / 2, top, cz + v * sz / 2]]),
+          kind: 'building', color: colors[Math.floor(r() * colors.length)], edge: 0.55,
+        });
+      }
+    }
+    return;
+  }
   for (let i = 0; i < line.length - 1; i++) {
     const a = line[i].p, b = line[i + 1].p;
     const len = Math.hypot(b[0] - a[0], b[2] - a[2]);

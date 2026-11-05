@@ -218,12 +218,12 @@ export function buildZoneBox(t, color = [0.2, 1, 0.55]) {
     uniforms: { uColor: { value: new THREE.Color(...color) }, uTime: { value: 0 } },
     vertexShader: `varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0);} `,
     fragmentShader: `uniform vec3 uColor; uniform float uTime; varying vec3 vP;
-      void main(){ float h = vP.y / ${size.y.toFixed(1)} + 0.5; float a = (1.0-h)*0.22 * (0.8+0.2*sin(uTime*3.0 + h*10.0));
+      void main(){ float h = vP.y / ${size.y.toFixed(1)} + 0.5; float a = (1.0-h)*0.06 * (0.8+0.2*sin(uTime*3.0 + h*10.0));
         gl_FragColor = vec4(uColor*1.5, a); }`,
     transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, fog: false,
   }));
   g.add(box);
-  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(box.geometry), new THREE.LineBasicMaterial({ color: new THREE.Color(...color).multiplyScalar(2) }));
+  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(box.geometry), new THREE.LineBasicMaterial({ color: new THREE.Color(...color).multiplyScalar(1.2) }));
   g.add(edges);
   g.position.copy(center);
   g.userData.update = (t2) => { box.material.uniforms.uTime.value = t2; };

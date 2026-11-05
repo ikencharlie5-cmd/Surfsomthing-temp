@@ -98,7 +98,7 @@ export class Renderer {
     this.scene.fog.near = e.fogNear;
     this.scene.fog.far = e.fogFar;
     this.sky.visible = !!e.sky;
-    this.sky.material.uniforms.uMode.value = e.sky === 'space' ? 1 : e.sky === 'desert' ? 2 : 0;
+    this.sky.material.uniforms.uMode.value = e.sky === 'space' ? 1 : e.sky === 'desert' ? 2 : e.sky === 'volcanic' ? 3 : 0;
     this.floor.visible = e.floor;
     this.floor.material.uniforms.uSea.value = e.floorMode === 'sea' ? 1 : e.floorMode === 'city' ? 2 : 0;
     this.mountains.visible = e.mountains;
@@ -338,7 +338,15 @@ void main() {
       col += vec3(0.8, 0.85, 1.0) * s * 1.6;
     }
   }
-  if (uMode > 1.5) {
+  if (uMode > 2.5) {
+    // volcanic: smoky black-red sky glowing at the horizon, a few dim stars
+    col = mix(vec3(0.5, 0.08, 0.03), vec3(0.03, 0.01, 0.015), smoothstep(-0.05, 0.45, h));
+    float smoke = sin(d.x * 6.0 + uTime * 0.05) * sin(d.z * 5.0 - d.y * 3.0);
+    col *= 0.75 + 0.25 * smoothstep(-1.0, 1.0, smoke);
+    vec2 uv4 = vec2(atan(d.z, d.x) * 200.0, h * 260.0);
+    float r4 = hash(floor(uv4));
+    if (h > 0.25 && r4 > 0.99) col += vec3(1.0, 0.7, 0.6) * smoothstep(0.3, 0.0, length(fract(uv4) - 0.5)) * 0.6;
+  } else if (uMode > 1.5) {
     // desert night: deep blue, a huge moon and a sky full of stars
     col = mix(vec3(0.12, 0.06, 0.2), vec3(0.01, 0.02, 0.07), smoothstep(-0.02, 0.5, h));
     if (h < 0.0) col = vec3(0.05, 0.03, 0.08);
