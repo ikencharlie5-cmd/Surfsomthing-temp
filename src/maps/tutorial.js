@@ -7,9 +7,9 @@ export default function build() {
   });
   addCourse(b, {
     ramp: { width: 320, height: 440, color: COLORS.cyan, minSpeed: 1000 },
-    startHint: 'Walk forward (W) off the platform. On the ramp, let go of W and hold D, the key toward the ramp. This big curved drop builds your speed: turn the mouse slowly right to follow it.',
+    startHint: 'Walk forward (W) off the platform. On the ramp, let go of W and hold D, the key toward the ramp. This steep drop-in builds your speed before the first gap.',
     build: (c) => c
-      .curve(100, 4000, 2300).straight(3000, 380)
+      .dropIn(6000, 2400).straight(3000, 380)
       .gap(800, 0, { color: COLORS.magenta }).checkpoint('Gaps: fly off the end and land on the same side of the next ramp. Tap D to stay high. Fall, and you respawn at the last checkpoint.')
       .straight(3500, 1000)
       .gap(800).straight(4000, 420)

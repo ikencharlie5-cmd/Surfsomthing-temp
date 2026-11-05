@@ -11,7 +11,7 @@ export default function build() {
   addCourse(b, {
     ramp: { width: 270, height: 390, color: COLORS.magenta, minSpeed: 1100 },
     build: (c) => c
-      .curve(100, 3800, 2200).straight(2000, 250)
+      .dropIn(6000, 2300).straight(2000, 250)
       .gap(800, 0, { tunnel }).straight(3500, 380)
       .gap(800).curve(60, 5000, 520)
       .gap(850, 0, { color: COLORS.cyan, vmin: 1000 }).checkpoint()

@@ -69,28 +69,9 @@ export class MapBuilder {
    *   sides: 'both'|'left'|'right' (left/right relative to path direction), color
    */
   ramp(path, o = {}) {
-    const w = o.width ?? 220;
-    const h = o.height ?? 300;
-    const sides = o.sides || 'both';
     const color = o.color || COLORS.magenta;
-    const sections = [];
-    for (let i = 0; i < path.length; i++) {
-      const a = path[Math.max(0, i - 1)], b = path[Math.min(path.length - 1, i + 1)];
-      let tx = b[0] - a[0], tz = b[2] - a[2];
-      const l = Math.hypot(tx, tz) || 1;
-      tx /= l; tz /= l;
-      const rx = -tz, rz = tx; // right vector (Y up)
-      const p = path[i];
-      const ridge = [p[0], p[1], p[2]];
-      const below = [p[0], p[1] - h, p[2]];
-      const right = [p[0] + rx * w, p[1] - h, p[2] + rz * w];
-      const left = [p[0] - rx * w, p[1] - h, p[2] - rz * w];
-      if (sides === 'both') sections.push([ridge, left, right]);
-      else if (sides === 'left') sections.push([ridge, left, below]);
-      else sections.push([ridge, right, below]);
-    }
-    for (let i = 0; i < sections.length - 1; i++) {
-      this.map.brushes.push({ points: [...sections[i], ...sections[i + 1]], kind: 'surf', color });
+    for (let i = 0; i < path.length - 1; i++) {
+      this.map.brushes.push({ points: rampSegmentPoints(path, i, o), kind: 'surf', color });
     }
     return this;
   }
@@ -103,6 +84,31 @@ export class MapBuilder {
   endZone(min, max) { return this.trigger('end', min, max); }
 
   build() { return this.map; }
+}
+
+/**
+ * The 6 corner points of ramp segment i (from path[i] to path[i+1]).
+ * One triangular cross-section per path point (oriented by the averaged
+ * tangent), shared by neighbouring segments so the surface is continuous.
+ */
+export function rampSegmentPoints(path, i, o = {}) {
+  const w = o.width ?? 220;
+  const h = o.height ?? 300;
+  const sides = o.sides || 'both';
+  const sec = (j) => {
+    const a = path[Math.max(0, j - 1)], b = path[Math.min(path.length - 1, j + 1)];
+    let tx = b[0] - a[0], tz = b[2] - a[2];
+    const l = Math.hypot(tx, tz) || 1;
+    tx /= l; tz /= l;
+    const rx = -tz, rz = tx;
+    const p = path[j];
+    const ridge = [p[0], p[1], p[2]];
+    const below = [p[0], p[1] - h, p[2]];
+    const right = [p[0] + rx * w, p[1] - h, p[2] + rz * w];
+    const left = [p[0] - rx * w, p[1] - h, p[2] - rz * w];
+    return sides === 'both' ? [ridge, left, right] : sides === 'left' ? [ridge, left, below] : [ridge, right, below];
+  };
+  return [...sec(i), ...sec(i + 1)];
 }
 
 /** Straight line from a to b split into n segments. */
@@ -212,8 +218,26 @@ export class Course {
     return this;
   }
 
+  /**
+   * Drop-in: a straight ramp whose ridge starts steep and flattens out
+   * (like a ski-jump in-run), so you start the map with speed.
+   * Profile: y = drop * (1 - (1 - t)^3), starting slope 3*drop/length.
+   */
+  dropIn(length, drop, steps = 14) {
+    const [fx, fz] = fwdOf(this.h);
+    const s = [...this.p];
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      const k = 1 - (1 - t) ** 3;
+      this.p = [s[0] + fx * length * t, s[1] - drop * k, s[2] + fz * length * t];
+      this._push();
+    }
+    this.slope = 0.05;
+    return this;
+  }
+
   /** angle > 0 turns right, < 0 turns left. */
-  curve(angle, radius, drop, steps = Math.max(4, Math.round(Math.abs(angle) / 7.5))) {
+  curve(angle, radius, drop, steps = Math.max(4, Math.round(Math.abs(angle) / 7.5), Math.round((Math.abs(angle) * D2R * radius) / 700))) {
     const sgn = Math.sign(angle);
     const [rx, rz] = rightOf(this.h);
     const c = [this.p[0] + sgn * rx * radius, this.p[2] + sgn * rz * radius];

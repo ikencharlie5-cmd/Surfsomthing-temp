@@ -54,6 +54,7 @@ export class Player {
 }
 
 const tr = new TraceResult();
+const tr2 = new TraceResult();
 const tmpA = new V3();
 const tmpB = new V3();
 
@@ -72,6 +73,7 @@ export class Movement {
   tick(p, cmd, dt) {
     const cv = this.cv;
     p.surfing = false;
+    p.ticksSinceSurf = (p.ticksSinceSurf ?? 99) + 1;
     this.unstick(p);
 
     if (!p.onGround) p.vel.y -= cv.gravity * 0.5 * dt;
@@ -230,7 +232,12 @@ export class Movement {
   }
 
   markSurf(p, n) {
-    if (n.y > 0.05 && n.y < GROUND_MIN_NY) { p.surfing = true; p.surfNormal.copy(n); }
+    if (n.y > 0.05 && n.y < GROUND_MIN_NY) {
+      p.surfing = true;
+      p.surfNormal.copy(n);
+      (p.lastSurfNormal ??= new V3()).copy(n);
+      p.ticksSinceSurf = 0;
+    }
   }
 
   /** Source's TryPlayerMove: slide along up to MAX_CLIP_PLANES planes. */
@@ -251,6 +258,7 @@ export class Movement {
         planes.length = 0;
       }
       if (tr.fraction === 1) break;
+      if (this.seamStep(p, tr, timeLeft)) break;
       this.markSurf(p, tr.normal);
       timeLeft -= timeLeft * tr.fraction;
       if (planes.length >= MAX_CLIP_PLANES) { p.vel.set(0, 0, 0); break; }
@@ -278,6 +286,29 @@ export class Movement {
         if (p.vel.dot(primal) <= 0) { p.vel.set(0, 0, 0); break; }
       }
     }
+  }
+
+  /**
+   * Seam fix (like surf servers' "rampbug" fixes): while surfing, a tiny
+   * lip where two ramp segments meet can register as a wall hit and stop
+   * you dead. If lifting the move a few units off the ramp we're riding
+   * clears it completely, take that move instead.
+   */
+  seamStep(p, hit, timeLeft) {
+    const n = p.lastSurfNormal;
+    if (!n || p.ticksSinceSurf > 3) return false;
+    if (hit.normal.dot(n) > 0.97) return false; // that's just the ramp itself
+    if (p.vel.len() < 300) return false;
+    for (const lift of [2, 5, 9]) {
+      const s = new V3(p.pos.x + n.x * lift, p.pos.y + n.y * lift, p.pos.z + n.z * lift);
+      const e = s.clone().addScaled(p.vel, timeLeft);
+      const t2 = this.world.trace(s, e, HULL, tr2);
+      if (!t2.startsolid && t2.fraction === 1) {
+        p.pos.copy(t2.endpos);
+        return true;
+      }
+    }
+    return false;
   }
 
   /** If we're embedded in geometry, nudge out. */

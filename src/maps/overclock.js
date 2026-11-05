@@ -8,7 +8,7 @@ export default function build() {
   addCourse(b, {
     ramp: { width: 185, height: 300, color: COLORS.red, minSpeed: 1100 },
     build: (c) => c
-      .curve(120, 3200, 2600).straight(2000, 200)
+      .dropIn(6000, 2700).straight(2000, 200)
       .gap(1000, 300).straight(3000, 250)
       .gap(1000, -300, { color: COLORS.magenta }).curve(75, 4200, 500)
       .fork({ length: 4800, speed: 1950, shift: 450, gapIn: 1300, gapOut: 1300, color: COLORS.yellow })

@@ -121,3 +121,17 @@ test('trigger keeps vector bounds when constructed with map data', async () => {
   assert.ok(t.touches(new V3(0, 0, 0), HULL));
   assert.ok(!t.touches(new V3(100, 0, 0), HULL));
 });
+
+test('seam fix does not let a surfer pass through a real wall', () => {
+  const m = new MapBuilder('t', 't').ramp(line([0, 0, 0], [0, -1500, -8000], 4), { width: 220, height: 320 }).build();
+  // a tall wall across the ramp
+  m.brushes.push(...new MapBuilder('w', 'w').box([0, -500, -3000], [2000, 3000, 100]).build().brushes);
+  const world = worldFrom(m);
+  const mv = new Movement(world);
+  const p = new Player();
+  p.teleport([-140, 0, -100]);
+  for (let i = 0; i < 1500; i++) {
+    mv.tick(p, { forward: 0, side: p.pos.x < -110 ? 1 : 0, jump: false, yaw: 0 }, DT);
+  }
+  assert.ok(p.pos.z > -2950, `stopped by the wall (z=${p.pos.z.toFixed(0)})`);
+});

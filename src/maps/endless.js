@@ -1,6 +1,6 @@
 // Endless mode: a seeded, procedurally generated surf course that streams in
 // piece by piece and gets harder the further you go.
-import { Course, COLORS, fwdOf, rightOf } from './builder.js';
+import { Course, COLORS, fwdOf, rightOf, rampSegmentPoints } from './builder.js';
 
 const PALETTE = [COLORS.cyan, COLORS.magenta, COLORS.purple, COLORS.orange, COLORS.yellow, COLORS.green, COLORS.blue, COLORS.red];
 
@@ -38,15 +38,7 @@ export class EndlessTrack {
   }
 
   _emitSegment(path, i, o) {
-    // mirrors MapBuilder.ramp for a single segment
-    const sec = (j) => {
-      const a = path[Math.max(0, j - 1)], b = path[Math.min(path.length - 1, j + 1)];
-      let tx = b[0] - a[0], tz = b[2] - a[2];
-      const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l;
-      const rx = -tz, rz = tx; const p = path[j];
-      return [[p[0], p[1], p[2]], [p[0] - rx * o.width, p[1] - o.height, p[2] - rz * o.width], [p[0] + rx * o.width, p[1] - o.height, p[2] + rz * o.width]];
-    };
-    this.pending.push({ points: [...sec(i), ...sec(i + 1)], kind: 'surf', color: o.color });
+    this.pending.push({ points: rampSegmentPoints(path, i, o), kind: 'surf', color: o.color });
   }
 
   /** Spawn platform + first piece. */
@@ -106,9 +98,8 @@ export class EndlessTrack {
     if (this.drift < -80) turnSign = 1;
     const inside = turnSign !== outside;
     if (n === 0) {
-      // big curved drop-in to build momentum before the first gap
-      c.curve(100, 3800, 2300).straight(1500, 250);
-      this.drift += 100;
+      // drop-in: starts steep and flattens out, so you hit the first gap fast
+      c.dropIn(6000, 2400).straight(1500, 150);
     } else if (kind === 'straight') {
       const L = slope < 0 ? lerp(2000, 3000, r()) : lerp(3000, 5000, r());
       c.straight(L, L * slope);

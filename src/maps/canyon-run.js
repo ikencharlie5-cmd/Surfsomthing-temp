@@ -12,7 +12,7 @@ export default function build() {
     ramp: { width: 260, height: 380, color: COLORS.yellow, minSpeed: 1150, tunnel: canyon },
     platformColor: COLORS.orange,
     build: (c) => c
-      .curve(100, 3800, 2300).straight(2500, 280)
+      .dropIn(6000, 2400).straight(2500, 280)
       .gap(850).curve(65, 4500, 560)
       .gap(900, -240, { face: 'right' }).curve(-65, 4500, 560)
       .gap(900, 240, { face: 'left', color: COLORS.orange, vmin: 1000 }).checkpoint()
