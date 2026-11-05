@@ -10,7 +10,7 @@ export default function build() {
     startHint: 'Walk forward (W) off the platform. On the ramp, let go of W and hold D, the key toward the ramp. This steep drop-in builds your speed before the first gap.',
     build: (c) => c
       .dropIn(6000, 2400).straight(3000, 380)
-      .gap(800, 0, { color: COLORS.magenta }).checkpoint('Gaps: fly off the end and land on the same side of the next ramp. Tap D to stay high. Fall, and you respawn at the last checkpoint.')
+      .gap(800, 0, { color: COLORS.magenta }).checkpoint('Gaps: fly off the end and land on the same side of the next ramp. Tap D to stay high. Fall, and you go back to the start.')
       .straight(3500, 1000)
       .gap(800).straight(4000, 420)
       .gap(900, 0, { color: COLORS.green }).checkpoint('Air strafing: the next ramp is offset to the LEFT. In the air, hold A and move the mouse left to drift onto it.')

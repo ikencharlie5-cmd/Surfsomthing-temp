@@ -19,7 +19,7 @@ export function fmtDelta(d) {
 
 const ACTION_LABELS = {
   forward: 'Forward', back: 'Back', left: 'Strafe left', right: 'Strafe right',
-  jump: 'Jump', restart: 'Restart run', stage: 'Back to checkpoint', ghost: 'Toggle ghost',
+  jump: 'Jump', restart: 'Restart run', stage: 'Restart (alt key)', ghost: 'Toggle ghost',
 };
 
 export class UI {
@@ -95,7 +95,7 @@ export class UI {
         <div class="diff ${m.difficulty}">${m.difficulty}</div>
         <div class="title">${esc(m.name)}</div>
         <div class="desc">${esc(m.description)}</div>
-        <div class="muted small">${space} · ${m.checkpoints.length - 1} checkpoints${m.forks?.length ? ` · ${m.forks.length} fast line${m.forks.length > 1 ? 's' : ''}` : ''}${m.cvars?.gravity ? ' · low gravity' : ''}</div>
+        <div class="muted small">${space}${m.forks?.length ? ` · ${m.forks.length} fast line${m.forks.length > 1 ? 's' : ''}` : ''}${m.cvars?.gravity ? ' · low gravity' : ''}</div>
         <div class="pb">${pb ? 'PB ' + fmtTime(pb.time) : 'No time set'}</div>`;
       card.addEventListener('keydown', (e) => { if (e.key === 'Enter') this.h.onAction('play-map', { map: m.id }); });
       list.appendChild(card);
@@ -162,7 +162,7 @@ export class UI {
       const d = pbt != null ? t - pbt : null;
       const row = document.createElement('div');
       row.className = 'split';
-      row.innerHTML = `<span>Checkpoint ${i + 1}</span><span>${fmtTime(t)} <span class="d ${d == null ? '' : d < 0 ? 'good' : 'bad'}">${d == null ? '' : fmtDelta(d)}</span></span>`;
+      row.innerHTML = `<span>Split ${i + 1}</span><span>${fmtTime(t)} <span class="d ${d == null ? '' : d < 0 ? 'good' : 'bad'}">${d == null ? '' : fmtDelta(d)}</span></span>`;
       sp.appendChild(row);
     });
     const next = $('#finish-next');
@@ -323,7 +323,7 @@ export class UI {
       H.pb.textContent = extra.best ? `BEST ${extra.best}` : '';
     } else {
       H.timer.textContent = h.status === 'start' ? 'START' : fmtTime(h.time);
-      H.stage.textContent = `CP ${h.cp}/${h.cps - 1}`;
+      H.stage.textContent = `${Math.round(h.progress * 100)}%`;
       H.pb.textContent = extra.pb != null ? `PB ${fmtTime(extra.pb)}` : '';
     }
     H.timer.classList.toggle('idle', h.status === 'start');

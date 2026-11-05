@@ -75,7 +75,10 @@ export class MapBuilder {
   ramp(path, o = {}) {
     const color = o.color || COLORS.magenta;
     for (let i = 0; i < path.length - 1; i++) {
-      this.map.brushes.push({ points: rampSegmentPoints(path, i, o), kind: 'surf', color });
+      const a = path[i], b = path[i + 1];
+      const l = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) || 1;
+      const dir = [(b[0] - a[0]) / l, (b[1] - a[1]) / l, (b[2] - a[2]) / l];
+      this.map.brushes.push({ points: rampSegmentPoints(path, i, o), kind: 'surf', color, dir });
     }
     return this;
   }
@@ -500,7 +503,8 @@ function nearLine(line, x, z) {
  * Neon city: towers on both sides of the course. They're solid (you can
  * crash into one if you fly way off line) but kept clear of the ride.
  */
-export function addCity(m, { seed = 1, spacing = 1500, clear = 1700, colors = [COLORS.cyan, COLORS.magenta, COLORS.yellow, COLORS.purple] } = {}) {
+export function addCity(m, { seed = 1, spacing = 1500, clear = 1700, streetY = null, grid = 0, colors = [COLORS.cyan, COLORS.magenta, COLORS.yellow, COLORS.purple] } = {}) {
+  const taken = new Set();
   const r = rng(seed);
   const line = m.line;
   for (let i = 0; i < line.length - 1; i++) {
@@ -514,12 +518,21 @@ export function addCity(m, { seed = 1, spacing = 1500, clear = 1700, colors = [C
       for (const side of [-1, 1]) {
         if (r() < 0.25) continue;
         const lat = side * (clear + line[i].width + r() * 2600);
-        const cx = px + rx * lat, cz = pz + rz * lat;
-        const sx = 700 + r() * 900, sz = 700 + r() * 900;
+        let cx = px + rx * lat, cz = pz + rz * lat;
+        let sx = 700 + r() * 900, sz = 700 + r() * 900;
+        if (grid) {
+          // snap onto the centre of a city block between the roads
+          const gx = Math.floor(cx / grid), gz = Math.floor(cz / grid);
+          const key = gx + ',' + gz;
+          if (taken.has(key)) continue;
+          taken.add(key);
+          cx = (gx + 0.5) * grid; cz = (gz + 0.5) * grid;
+          sx = Math.min(sx * 1.4, grid - 700); sz = Math.min(sz * 1.4, grid - 700);
+        }
         // keep clear of every part of the course
         if (nearLine(line, cx, cz).d < clear + Math.max(sx, sz) * 0.75) continue;
         const top = py + (r() < 0.4 ? 1500 + r() * 3500 : -300 + r() * 1400);
-        const bottom = py - 9000;
+        const bottom = streetY ?? py - 9000;
         m.brushes.push({
           points: [[-1, -1], [-1, 1], [1, -1], [1, 1]].flatMap(([u, v]) => [[cx + u * sx / 2, bottom, cz + v * sz / 2], [cx + u * sx / 2, top, cz + v * sz / 2]]),
           kind: 'building', color: colors[Math.floor(r() * colors.length)], edge: 0.55,

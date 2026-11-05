@@ -16,14 +16,6 @@ for (const map of MAPS) {
     assert.ok(r.maxSpeed < 3400, `speed stays in band (max ${r.maxSpeed.toFixed(0)})`);
   });
 
-  map.checkpoints.forEach((_, ci) => {
-    test(`${map.id}: checkpoint ${ci} respawn (standing start) reaches the next one`, () => {
-      const r = playSection(map, world, ci);
-      report(`${map.id} cp${ci}`, r);
-      assert.ok(r.ok, `${r.reason} at guide point ${r.idx}/${r.of}`);
-    });
-  });
-
   (map.forks || []).forEach((f, fi) => {
     test(`${map.id}: fork ${fi} fast line is clearable at ${f.speed} u/s`, () => {
       // a full-speed run from the start that takes the fast line

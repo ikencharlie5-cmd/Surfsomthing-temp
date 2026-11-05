@@ -4,7 +4,7 @@ import { Brush } from './physics/brush.js';
 import { World, Trigger } from './physics/world.js';
 import { Movement, Player, HULL, EYE_OFFSET } from './physics/movement.js';
 import { V3 } from './physics/vec.js';
-import { buildBrushMesh, buildGate, buildZoneBox, buildRibs, buildCheckpointMarker, buildDecor, faceMaterial } from './render/worldMesh.js';
+import { buildBrushMesh, buildGate, buildZoneBox, buildRibs, buildDecor, faceMaterial } from './render/worldMesh.js';
 import { disposeTree } from './render/renderer.js';
 import { buildTheme } from './render/scenery.js';
 import { EndlessTrack } from './maps/endless.js';
@@ -98,10 +98,6 @@ export class Game {
         this.root.add(g); this.animated.push(g);
       }
     }
-    for (let i = 1; i < this.cps.length; i++) {
-      const m = buildCheckpointMarker(this.cps[i]);
-      this.root.add(m); this.animated.push(m);
-    }
     if (!demo) this.ghostFrames = this.settings.ghost ? store.loadGhost(map.id) : null;
     this.restart();
   }
@@ -182,14 +178,13 @@ export class Game {
     this._chaseReset = true;
     this.bot = null;
     this.progress = new SurfBot(this.line, { start: c.idx });
+    this.progressIdx = c.idx;
   }
 
-  /** "Back to checkpoint" key. */
+  /** Old "back to checkpoint" key: there are no checkpoints, so it restarts. */
   toStageStart() {
     if (this.run.status === 'finished' || this.run.status === 'dead') return;
-    if (this.mode === 'endless') { this.restart(); return; }
-    this._breakCombo();
-    this._respawn(this.run.cp);
+    this.restart();
     this.audio.play('reset');
   }
 
@@ -291,17 +286,12 @@ export class Game {
 
   _mapProgress(p, idx) {
     const run = this.run;
-    // reached the next checkpoint? (must have landed on its ramp)
+    this.progressIdx = idx;
+    // no checkpoints: map hint points just show their tutorial hint
     const next = this.cps[run.cp + 1];
     if (next && idx > next.idx && p.surfing) {
       run.cp++;
-      if (!this.demo && run.status === 'running') {
-        const time = run.ticks * TICK;
-        run.splits[run.cp - 1] = time;
-        this.audio.play('stage');
-        const pbt = this.pbEntry()?.splits?.[run.cp - 1];
-        this.ev.onCheckpoint?.({ cp: run.cp, count: this.cps.length, time, delta: pbt != null ? time - pbt : null, hint: next.hint });
-      }
+      if (!this.demo && run.status === 'running' && next.hint) this.ev.onHint?.(next.hint);
     }
     if (this.endTrig && this.endTrig.touches(p.pos, HULL)) {
       if (this.demo) { this.restart(); return; }
@@ -310,11 +300,11 @@ export class Game {
     }
     const lp = this.line[idx];
     if (this.env.floorY != null) this.r.setFloorY(lp.p[1] - lp.height + this.env.floorY);
-    if (p.pos.y < lp.p[1] - lp.height - 1500 || p.pos.y < this.mapMinY - 2000) {
-      run.resets++;
-      this._breakCombo();
-      this._respawn(run.cp);
-      if (!this.demo) { this.audio.play('reset'); this.ev.onReset?.(this.cps[run.cp]); }
+    const splashed = this.map.waterY != null && p.pos.y - 36 < this.map.waterY;
+    if (splashed || p.pos.y < lp.p[1] - lp.height - 1500 || p.pos.y < this.mapMinY - 2000) {
+      // fell: back to the start, run restarts
+      this.restart();
+      if (!this.demo) { this.audio.play('reset'); this.ev.onReset?.(); }
     }
   }
 
@@ -480,8 +470,7 @@ export class Game {
       speed: Math.hypot(p.vel.x, p.vel.z),
       time: run.ticks * TICK,
       status: run.status,
-      cp: run.cp,
-      cps: this.cps.length,
+      progress: this.mode === 'map' && this.line ? Math.min(1, (this.progressIdx || 0) / (this.line.length - 1)) : 0,
       sync: this.syncPct(),
       combo: this.combo,
       hist: this.speedHist,

@@ -25,7 +25,6 @@ Then open http://localhost:8080.
 | Move / strafe | `W` `A` `S` `D` |
 | Jump (hold to bunny-hop) | `Space` |
 | Restart run | `R` |
-| Back to last checkpoint | `T` |
 | Toggle PB ghost | `G` |
 | Pause / menu | `Esc` |
 
@@ -57,9 +56,8 @@ Start with **First Wave**, the tutorial map. It shows hints at each stage.
   don't snag on seams between ramp segments.
 - **Eleven continuous momentum maps.** None of them teleport you, so you
   never lose speed between sections. Each starts with a steep drop-in that
-  flattens out, so you start with speed. Fall and you respawn standing still
-  at the last checkpoint (the spinning diamond). Five maps are **earned** by
-  finishing others.
+  flattens out, so you start with speed. There are no checkpoints: fall and
+  the run restarts from the top. Five maps are **earned** by finishing others.
 
   | Map | Difficulty | Space | Unlock |
   | --- | --- | --- | --- |
@@ -68,11 +66,11 @@ Start with **First Wave**, the tutorial map. It shows hints at each stage.
   | Night Tunnel | medium | fully enclosed ribbed tunnel | open |
   | Canyon Run | medium | real rock canyon at night: strata walls, arches, mesas, neon cacti, tumbleweeds, huge moon | open |
   | Overclock | hard | open sky, thin ramps, 2 fast lines | open |
-  | Data Core | hard | tight enclosed shaft | open |
-  | Skyline Rush | medium | neon city, lit towers | finish Neon Drift |
-  | Vapor Coast | easy | neo beach: coastal cliffs down to a beach, neon palms, boardwalk, pier, retro props, sunset ocean | finish Night Tunnel |
+  | Data Core | hard | server farm: LED racks, cable trays, data pulses | open |
+  | Skyline Rush | medium | real city at night: towers on blocks, rooftop neon, beacons, street traffic, distant skyline | finish Neon Drift |
+  | Vapor Coast | easy | neo beach: drop in from a hotel rooftop, then skim low over sand, umbrellas, palms, boardwalk shops, road traffic, pier and open ocean to the horizon | finish Night Tunnel |
   | Crystal Cave | medium | natural rock cave: stalactites, crystal clusters, underground river | finish Canyon Run |
-  | Orbital | hard | space station + open space, lower gravity | finish Overclock |
+  | Orbital | hard | space station: panelled corridors, scaffolds, solar arrays, giant ring station, lower gravity | finish Overclock |
   | Final Overdrive | expert | everything: open, canyon, tunnel, 3 fast lines | finish Data Core, Orbital and Crystal Cave |
 - **Fast lines:** at some gaps, a long jump straight ahead lands directly on a
   later ramp, but only if you're carrying enough speed. Slower riders take a
@@ -127,7 +125,6 @@ npm test
 The tests cover the physics (landing, friction, surfing, seams, air-strafing).
 A surf bot also uses the real physics to play:
 - every map from start to finish, checking that speed stays under 3400 u/s
-- each checkpoint section from a standing respawn
 - every fork's fast line
 - 20+ pieces of several endless seeds
 
@@ -164,7 +161,7 @@ Rules of thumb the bot tests taught us:
 - Add a gentle run-out after steep ramps.
 - Widen turns for fast sections. A radius of about v²/650 is comfortable.
 
-Themed scenery (`theme: { type: 'beach' | 'canyon' | 'cave' }`) is generated
+Themed scenery (`theme: { type: 'beach' | 'canyon' | 'cave' | 'city' | 'station' | 'servers' }`) is generated
 procedurally around the course in `src/render/scenery.js`: low-poly rock and
 terrain plus props. It is decoration only. On these maps you collide with a
 smooth hidden shell set just inside the rough rock, so bumps never scrub

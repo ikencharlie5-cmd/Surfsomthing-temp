@@ -64,7 +64,15 @@ export function buildBrushMesh(brushes) {
       // underside edges are dimmer
       const low = Math.min(a.y, b.y) < (br.max.y + br.min.y) / 2 && Math.abs(a.y - b.y) < 1 ? 0.35 : 1;
       linePos.push(a.x, a.y, a.z, b.x, b.y, b.z);
-      const e = 2.4 * low * edgeScale;
+      let e = 2.4 * low * edgeScale;
+      // ramp segments: keep the long ridge/base lines bright, dim the
+      // cross-section lines between segments (they pile up into glare)
+      const d = br.meta.dir;
+      if (d) {
+        const ex = b.x - a.x, ey = b.y - a.y, ez = b.z - a.z;
+        const el = Math.hypot(ex, ey, ez) || 1;
+        if (Math.abs((ex * d[0] + ey * d[1] + ez * d[2]) / el) < 0.5) e *= 0.28;
+      }
       lineCol.push(c[0] * e, c[1] * e, c[2] * e, c[0] * e, c[1] * e, c[2] * e);
     }
   }

@@ -4,12 +4,13 @@ import { MapBuilder, addCourse, COLORS } from './builder.js';
 export default function build() {
   const b = new MapBuilder('data-core', 'Data Core', {
     difficulty: 'hard',
-    description: 'A tight, enclosed data shaft. Narrow ramps, close walls, sharp turns.',
-    env: { sky: false, mountains: false, fogColor: [0.0, 0.03, 0.03], fogNear: 1800, fogFar: 13000, floorY: -2000, gridColor: [0.1, 1.0, 0.5] },
+    description: 'A server farm: racks of blinking LEDs, cable trays and data pulses in a tight shaft.',
+    env: { sky: false, mountains: false, floor: false, fogColor: [0.0, 0.025, 0.02], fogNear: 2000, fogFar: 14000 },
+    theme: { type: 'servers', seed: 31 },
   });
-  const shaft = { side: 300, top: 600, bottom: 550, ceiling: true, color: COLORS.green, ribColor: COLORS.green, ribSpacing: 600 };
+  const shaft = { side: 300, top: 600, bottom: 550, ceiling: true, hidden: true, color: COLORS.green };
   addCourse(b, {
-    ramp: { width: 200, height: 320, color: COLORS.green, minSpeed: 1150 },
+    ramp: { width: 200, height: 320, color: COLORS.green, minSpeed: 1150, tunnel: shaft },
     platformColor: COLORS.green,
     build: (c) => c
       .dropIn(6000, 2500).straight(1800, 200)

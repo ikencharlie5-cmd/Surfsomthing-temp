@@ -6,12 +6,13 @@ const STEEL = [0.55, 0.65, 0.85];
 export default function build() {
   const b = new MapBuilder('orbital', 'Orbital', {
     difficulty: 'hard',
-    description: 'Station corridors and open space under a ringed planet. Lower gravity: longer, floatier jumps.',
+    description: 'A space station: panelled corridors, scaffolds, solar arrays and a giant ring station. Lower gravity.',
     env: { sky: 'space', mountains: false, floor: false, fogColor: [0.01, 0.01, 0.03], fogNear: 15000, fogFar: 80000 },
     cvars: { gravity: 620 },
+    theme: { type: 'station', seed: 23 },
     unlock: { after: ['overclock'] },
   });
-  const corridor = { side: 380, top: 720, bottom: 600, ceiling: true, color: STEEL, ribColor: COLORS.cyan, ribSpacing: 700 };
+  const corridor = { side: 380, top: 720, bottom: 600, ceiling: true, hidden: true, color: STEEL };
   addCourse(b, {
     ramp: { width: 210, height: 320, color: COLORS.cyan, minSpeed: 1100 },
     platformColor: COLORS.cyan,

@@ -4,8 +4,9 @@ import { MapBuilder, addCourse, addCity, COLORS } from './builder.js';
 export default function build() {
   const b = new MapBuilder('skyline-rush', 'Skyline Rush', {
     difficulty: 'medium',
-    description: 'Night surf through a neon city. Towers loom on both sides.',
-    env: { mountains: false, fogColor: [0.1, 0.02, 0.16], fogNear: 6000, fogFar: 48000, gridColor: [0.9, 0.2, 1.0] },
+    description: 'A real city at night: towers on city blocks, rooftop neon, beacons and traffic on the streets far below.',
+    env: { mountains: false, floorMode: 'city', fogColor: [0.1, 0.02, 0.16], fogNear: 7000, fogFar: 60000 },
+    theme: { type: 'city', seed: 17 },
     unlock: { after: ['neon-drift'] },
   });
   addCourse(b, {
@@ -24,6 +25,10 @@ export default function build() {
       .gap(900, 300, { color: COLORS.purple }).straight(3200, 300)
       .gap(900, -300, { color: COLORS.magenta }).straight(3000, 300),
   });
-  addCity(b.map, { seed: 11 });
+  const minY = Math.min(...b.map.line.map((e) => e.p[1] - e.height));
+  const streetY = minY - 3500;
+  addCity(b.map, { seed: 11, streetY, grid: 3000 });
+  b.map.theme.streetY = streetY;
+  b.map.env.floorAbs = streetY;
   return b.build();
 }

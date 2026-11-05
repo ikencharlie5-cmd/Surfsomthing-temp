@@ -38,7 +38,9 @@ export class EndlessTrack {
   }
 
   _emitSegment(path, i, o) {
-    this.pending.push({ points: rampSegmentPoints(path, i, o), kind: 'surf', color: o.color });
+    const a = path[i], b = path[i + 1];
+    const l = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) || 1;
+    this.pending.push({ points: rampSegmentPoints(path, i, o), kind: 'surf', color: o.color, dir: [(b[0] - a[0]) / l, (b[1] - a[1]) / l, (b[2] - a[2]) / l] });
   }
 
   /** Spawn platform + first piece. */

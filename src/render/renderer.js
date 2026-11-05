@@ -100,7 +100,7 @@ export class Renderer {
     this.sky.visible = !!e.sky;
     this.sky.material.uniforms.uMode.value = e.sky === 'space' ? 1 : e.sky === 'desert' ? 2 : 0;
     this.floor.visible = e.floor;
-    this.floor.material.uniforms.uSea.value = e.floorMode === 'sea' ? 1 : 0;
+    this.floor.material.uniforms.uSea.value = e.floorMode === 'sea' ? 1 : e.floorMode === 'city' ? 2 : 0;
     this.mountains.visible = e.mountains;
     this.scene.background = e.sky ? null : FOG_COLOR.clone();
     const fu = this.floor.material.uniforms;
@@ -137,7 +137,7 @@ export class Renderer {
     const floorMat = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 }, uFog: { value: FOG_COLOR }, uCam: { value: new THREE.Vector3() },
-        uGridColor: { value: new THREE.Color() }, uGridFixed: { value: 0 }, uFadeFar: { value: 140000 }, uSea: { value: 0 },
+        uGridColor: { value: new THREE.Color() }, uGridFixed: { value: 0 }, uFadeFar: { value: 140000 }, uSea: { value: 0 }, uSunDir: { value: SUN_DIR },
       },
       vertexShader: FLOOR_VS, fragmentShader: FLOOR_FS, fog: false,
       transparent: false,
@@ -406,6 +406,7 @@ uniform vec3 uGridColor;
 uniform float uGridFixed;
 uniform float uFadeFar;
 uniform float uSea;
+uniform vec3 uSunDir;
 varying vec3 vWorld;
 float gridLine(vec2 p, float w) {
   vec2 g = abs(fract(p - 0.5) - 0.5) / fwidth(p);
@@ -421,13 +422,34 @@ void main() {
   vec3 lc = mix(vec3(1.0, 0.15, 0.8), vec3(0.0, 0.9, 1.0), 0.5 + 0.5 * sin(vWorld.x * 0.00002 + uTime * 0.2));
   lc = mix(lc, uGridColor, uGridFixed);
   vec3 col = base + lc * (l * 0.55 + big * 1.1) * fade;
-  if (uSea > 0.5) {
+  if (uSea > 1.5) {
+    // city streets: asphalt blocks, glowing road markings every 3000 units
+    vec2 q = vWorld.xz / 3000.0;
+    vec2 cellp = fract(q);
+    vec2 dEdge = min(cellp, 1.0 - cellp) * 3000.0; // distance to the nearest road centre line
+    float road = step(min(dEdge.x, dEdge.y), 260.0);
+    float side = smoothstep(300.0, 270.0, min(dEdge.x, dEdge.y)) - road;
+    float centre = (1.0 - smoothstep(0.0, 14.0, min(dEdge.x, dEdge.y))) * step(0.5, fract((vWorld.x + vWorld.z) / 400.0));
+    vec3 asphalt = vec3(0.025, 0.02, 0.04);
+    vec3 block = vec3(0.045, 0.03, 0.06) + vec3(0.3, 0.05, 0.4) * 0.15 * gridLine(vWorld.xz / 500.0, 1.0);
+    col = mix(block, asphalt, road);
+    col += vec3(1.0, 0.25, 0.8) * side * 0.6 * fade;
+    col += vec3(1.0, 0.75, 0.2) * centre * road * 1.2 * fade;
+  } else if (uSea > 0.5) {
     // synthwave ocean: deep teal with shimmering sun-glint lines
     float wave = sin(vWorld.x * 0.0011 + uTime * 1.3) * sin(vWorld.z * 0.0008 - uTime * 0.9);
     float glint = smoothstep(0.85, 1.0, sin(vWorld.z * 0.004 + wave * 3.0 + uTime));
-    float toward = smoothstep(9000.0, 0.0, abs(vWorld.x - uCam.x)) ;
-    col = vec3(0.01, 0.06, 0.09) + vec3(0.0, 0.25, 0.3) * (0.5 + 0.5 * wave) * fade * 0.4;
-    col += vec3(1.0, 0.45, 0.6) * glint * toward * 0.8;
+    // reflect the view ray off a wavy surface and catch the sunset
+    vec3 V = normalize(vWorld - uCam);
+    vec3 N = normalize(vec3(sin(vWorld.x * 0.004 + uTime) * 0.06 + wave * 0.03, 1.0, cos(vWorld.z * 0.003 - uTime * 0.8) * 0.06));
+    vec3 Rf = reflect(V, N);
+    float sunPath = pow(max(dot(Rf, normalize(uSunDir)), 0.0), 90.0);
+    float horizonGlow = pow(max(dot(Rf, normalize(uSunDir)), 0.0), 6.0);
+    col = vec3(0.02, 0.07, 0.12) + vec3(0.05, 0.22, 0.32) * (0.5 + 0.5 * wave) * 0.5;
+    col = mix(col, vec3(0.45, 0.12, 0.35), smoothstep(8000.0, 120000.0, dist) * 0.8);
+    col += vec3(1.0, 0.55, 0.45) * horizonGlow * 0.35;
+    col += vec3(1.0, 0.8, 0.5) * sunPath * (0.6 + glint * 1.6) * 1.4;
+    col += vec3(1.0, 0.45, 0.6) * glint * 0.12 * fade;
     col += lc * l * 0.12 * fade;
   }
   // horizon haze

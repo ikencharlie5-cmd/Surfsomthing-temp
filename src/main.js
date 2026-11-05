@@ -30,12 +30,8 @@ let currentSeed = null;
 const game = new Game(renderer, audio, settings, {
   setView(yaw, pitch) { input.yaw = yaw; input.pitch = pitch; },
   onStart() { ui.message('GO!', 0.8); },
-  onCheckpoint(info) {
-    ui.message(`CHECKPOINT ${info.cp}`, 1.0);
-    ui.split(info.delta, `CP ${info.cp}`);
-    if (info.hint) ui.hint(info.hint, 12);
-  },
-  onReset(cp) { if (cp?.hint) ui.hint(cp.hint, 7); },
+  onHint(text) { ui.hint(text, 12); },
+  onReset() { ui.message('RESTART', 0.8); showStageHint(true); },
   onScrub(loss) { ui.scrub(loss); audio.play('scrub'); },
   onComboEnd(points) { if (points > 300) ui.split(null, `COMBO ${points.toLocaleString()}`); },
   onFinish(r) {
