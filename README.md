@@ -81,7 +81,7 @@ Start with **First Wave**, the tutorial map. It shows hints at each stage.
   best combo, and has random and daily seeds.
 - **Ghosts and records:** your personal-best run replays as a ghost. The top-10
   local leaderboard per map shows stage splits compared to your PB.
-- **HUD:** speed, timer, checkpoint, strafe sync %, split deltas, speed combo,
+- **HUD:** speed, timer, course progress %, strafe sync %, speed combo,
   scrub warnings, a 6-second speed graph (scrubs marked in red), key display.
 - **Visuals:** striped synthwave sun, wireframe mountains, glowing grid floor,
   neon-edged glass ramps, glowing tunnel ribs, per-map fog and lighting, bloom,
@@ -143,7 +143,7 @@ addCourse(b, {
   build: (c) => c
     .curve(100, 3800, 2300).straight(2500, 300)      // drop-in
     .gap(800, 0, { tunnel }).straight(3500, 380)    // into a tunnel
-    .gap(900).checkpoint('optional hint')
+    .gap(900).checkpoint('optional tutorial hint')
     .straight(3500, 1000)                            // rebuild speed after respawn
     .fork({ length: 4400, speed: 2000, shift: -600 }) // fast line vs detour
     .straight(3000, 300),
@@ -151,7 +151,7 @@ addCourse(b, {
 ```
 
 `straight(length, drop)`, `curve(angleDeg, radius, drop)`, `wave(length, drop, amplitude)`,
-`gap(length, sideShift, opts)`, `checkpoint(hint)` and `fork({...})` chain together.
+`gap(length, sideShift, opts)`, `checkpoint(hint)` (now just a tutorial-hint point; there are no respawns) and `fork({...})` chain together.
 Gap drops are computed automatically so a slow player still clears the next ramp.
 
 Rules of thumb the bot tests taught us:
