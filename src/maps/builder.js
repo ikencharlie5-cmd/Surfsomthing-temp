@@ -398,7 +398,7 @@ export class Course {
     this.opts.tunnel = t;
     if (this.line.length) this.line[this.line.length - 1].tunnel = { ...t };
     const from = this.line.length - 1;
-    this.dodgeRun(pattern, { color: opts.blockColor || [0.55, 0.5, 0.4], edge: opts.edge ?? 1.0, slope: opts.slope });
+    this.dodgeRun(pattern, { color: opts.blockColor || [0.55, 0.5, 0.4], edge: opts.edge ?? 1.0, slope: opts.slope, spacing: opts.spacing, approach: opts.approach });
     this.opts.tunnel = prev;
     this.line[this.line.length - 1].tunnel = prev ? { ...prev } : null;
     this.structures.push({ kind, from, to: this.line.length - 1 });

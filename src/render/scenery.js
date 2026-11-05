@@ -18,6 +18,51 @@ const DENSITY = { low: 0.35, medium: 0.6, high: 1, ultra: 1.25 };
 // Geometry accumulator (flat-shaded, low-poly look)
 // ---------------------------------------------------------------------------
 
+// While a map's scenery is built, props are checked against the ride's
+// envelope (the ramps plus the air riders fly through) and dropped if they'd
+// poke into it. Set via withRide().
+let RIDE = null;
+let RIDE_OFF = false; // temporarily allow (gates/arches that frame the ride on purpose)
+
+function rideEnvelope(map) {
+  const cell = 2000;
+  const grid = new Map();
+  const add = (x, y, z, hw, up, down) => {
+    const k = Math.floor(x / cell) + ',' + Math.floor(z / cell);
+    if (!grid.has(k)) grid.set(k, []);
+    grid.get(k).push([x, y, z, hw, up, down]);
+  };
+  const line = map.line || [];
+  for (let i = 0; i < line.length - 1; i++) {
+    const a = line[i], b = line[i + 1];
+    const n = Math.max(1, Math.ceil(Math.hypot(b.p[0] - a.p[0], b.p[2] - a.p[2]) / 300));
+    const air = b.gap; // flight between ramps: riders can be well above the line
+    for (let k = 0; k <= n; k++) {
+      const u = k / n;
+      add(a.p[0] + (b.p[0] - a.p[0]) * u, a.p[1] + (b.p[1] - a.p[1]) * u, a.p[2] + (b.p[2] - a.p[2]) * u,
+        a.width + 320, air ? 1100 : 450, a.height + (air ? 700 : 250));
+    }
+  }
+  return (x0, y0, z0, x1, y1, z1) => {
+    const cx0 = Math.floor((x0 - 1200) / cell), cx1 = Math.floor((x1 + 1200) / cell);
+    const cz0 = Math.floor((z0 - 1200) / cell), cz1 = Math.floor((z1 + 1200) / cell);
+    for (let cx = cx0; cx <= cx1; cx++) for (let cz = cz0; cz <= cz1; cz++) {
+      const list = grid.get(cx + ',' + cz);
+      if (!list) continue;
+      for (const [x, y, z, hw, up, down] of list) {
+        if (x + hw < x0 || x - hw > x1 || z + hw < z0 || z - hw > z1) continue;
+        if (y + up < y0 || y - down > y1) continue;
+        return true;
+      }
+    }
+    return false;
+  };
+}
+
+function hitsRide(x0, y0, z0, x1, y1, z1) {
+  return !!RIDE && !RIDE_OFF && RIDE(x0, y0, z0, x1, y1, z1);
+}
+
 class Geo {
   constructor() { this.pos = []; this.nrm = []; this.col = []; this.glow = []; this.sway = []; this.lp = []; this.lc = []; }
 
@@ -43,6 +88,8 @@ class Geo {
 
   /** Tapered cylinder from p0 to p1. */
   cyl(p0, p1, r0, r1, segs, col, glow = 0, s0 = 0, s1 = 0) {
+    const rr = Math.max(r0, r1);
+    if (hitsRide(Math.min(p0[0], p1[0]) - rr, Math.min(p0[1], p1[1]) - rr, Math.min(p0[2], p1[2]) - rr, Math.max(p0[0], p1[0]) + rr, Math.max(p0[1], p1[1]) + rr, Math.max(p0[2], p1[2]) + rr)) return;
     const d = norm(sub(p1, p0));
     const u = norm(cross(Math.abs(d[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0], d));
     const v = cross(d, u);
@@ -56,6 +103,8 @@ class Geo {
 
   /** Axis-aligned-in-yaw box. */
   box(c, size, yaw, col, glow = 0) {
+    const hr = Math.hypot(size[0], size[2]) / 2;
+    if (hitsRide(c[0] - hr, c[1] - size[1] / 2, c[2] - hr, c[0] + hr, c[1] + size[1] / 2, c[2] + hr)) return;
     const [sx, sy, sz] = size.map((x) => x / 2);
     const cs = Math.cos(yaw), sn = Math.sin(yaw);
     const P = (x, y, z) => [c[0] + x * cs + z * sn, c[1] + y, c[2] - x * sn + z * cs];
@@ -66,6 +115,7 @@ class Geo {
 
   /** Low-poly blob (icosahedron-ish). */
   blob(c, r, col, glow = 0, rng = Math.random, squash = 1) {
+    if (hitsRide(c[0] - r * 1.25, c[1] - r * 1.25 * squash, c[2] - r * 1.25, c[0] + r * 1.25, c[1] + r * 1.25 * squash, c[2] + r * 1.25)) return;
     const g = new THREE.IcosahedronGeometry(1, 0);
     const p = g.attributes.position;
     const jit = new Map();
@@ -235,6 +285,11 @@ function strip(geo, fr, profile, { closed = false, displace, color }) {
 export function buildTheme(map, quality = 'high') {
   const t = map.theme;
   if (!t) return null;
+  RIDE = rideEnvelope(map);
+  try { return buildThemeInner(map, t, quality); } finally { RIDE = null; }
+}
+
+function buildThemeInner(map, t, quality) {
   const density = DENSITY[quality] ?? 1;
   if (t.type === 'beach') return buildBeach(map, t, density);
   if (t.type === 'canyon') return buildCanyon(map, t, density);
@@ -1811,6 +1866,11 @@ function tower(geo, lights, base, h, r, rng, f, s) {
 }
 
 function gatehouse(geo, lights, n, rng) {
+  RIDE_OFF = true;
+  try { gatehouseInner(geo, lights, n, rng); } finally { RIDE_OFF = false; }
+}
+
+function gatehouseInner(geo, lights, n, rng) {
   const c = n.gapCenter, R = n.right, F = n.fwd;
   const P = (lat, y, fwd = 0) => [c[0] + R[0] * lat + F[0] * fwd, y, c[2] + R[2] * lat + F[2] * fwd];
   const half = n.size / 2;
@@ -1871,6 +1931,11 @@ const SET_LOOK = {
 };
 
 export function buildSetPieces(map, quality = 'high') {
+  RIDE = rideEnvelope(map);
+  try { return buildSetPiecesInner(map, quality); } finally { RIDE = null; }
+}
+
+function buildSetPiecesInner(map, quality) {
   const structures = map.structures || [], boosts = map.boosts || [];
   if (!structures.length && !boosts.length) return null;
   const group = new THREE.Group();
@@ -2054,7 +2119,9 @@ function buildTempleComplex(map, t, density) {
   }
 
   // --- the pyramid: stepped tiers, four grand stairways, a summit shrine
-  const tiers = 11, base = 8200, topHalf = 1400;
+  // (sized to stay clear of the ride that circles it)
+  const tiers = 11, base = T.pyramid.half ?? 8200, topHalf = Math.min(1400, base * 0.2);
+  RIDE_OFF = true;
   const H = T.pyramid.top - G;
   for (let k = 0; k < tiers; k++) {
     const y0 = G + (H * k) / tiers, y1 = G + (H * (k + 1)) / tiers;
@@ -2085,6 +2152,7 @@ function buildTempleComplex(map, t, density) {
   geo.box([pc[0], sTop + 2500, pc[1]], [2400, 200, 2400], 0, T_STONE2);
   for (let k = 0; k < 40; k++) lights.flow([pc[0] + (rng() - 0.5) * 600, sTop + 1500, pc[1] + (rng() - 0.5) * 600], [pc[0] + (rng() - 0.5) * 900, sTop + 2300 + rng() * 1500, pc[1] + (rng() - 0.5) * 900], [1, 0.5 + rng() * 0.3, 0.1], 110, 0.6 + rng(), rng());
   lights.dot([pc[0], sTop + 1700, pc[1]], [1, 0.6, 0.2], 600, 0, 0);
+  RIDE_OFF = false;
 
   // --- the stone tower you start on
   const sp = map.spawn.pos;

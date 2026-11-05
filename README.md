@@ -84,12 +84,13 @@ Start with **First Wave**, the tutorial map. It shows hints at each stage.
   2500-3100 unit jump. Most kickers have a **double needle**: two walls
   inside the jump, each with a slot you have to fly through.
 
-  **Lost Temple** is a hand-designed set-piece map (`src/maps/lost-temple.js`).
-  You drop off a stone tower and circle a colossal stepped pyramid on the
-  inside face, so it fills your view. A kicker at its foot launches you into
-  the entrance tunnel (duck & dodge). Underground you circle the Hall of
-  Pillars, then a flooded chamber, then spiral one and a half turns down the
-  great hall around a giant idol. Riding through it takes about two minutes.
+  **Lost Temple** is a hand-designed set-piece map (`src/maps/lost-temple.js`),
+  about 70 seconds of nonstop action. You race around a colossal stepped
+  pyramid on the inside face, with gates and a boost on the way, then a
+  double-needle kicker. Next is a duck & dodge run down the entrance tunnel,
+  a gate between the columns of the Hall of Pillars, two more double-needle
+  kickers, the flooded chamber, and a final sprint around the idol in the
+  great hall.
 
   **Kickers on every map:** easy 1, medium/hard 2, expert/insane 3,
   extreme 6. Harder tiers use more double needles.
