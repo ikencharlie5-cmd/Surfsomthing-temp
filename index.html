@@ -32,6 +32,9 @@
     </div>
     <div id="hud-hint" class="hidden"></div>
     <div id="hud-center-msg" class="hidden"></div>
+    <div id="hud-scrub" class="hidden"></div>
+    <div id="hud-combo" class="hidden"><div class="mult">x1</div><div class="pts">0</div><div class="lbl">SPEED COMBO</div><div class="combo-bar"><div></div></div></div>
+    <canvas id="hud-graph" width="240" height="70"></canvas>
     <div id="crosshair"></div>
     <div id="hud-bottom">
       <div id="hud-speed">0</div>
@@ -44,7 +47,7 @@
       <div class="row"><div class="k" data-k="left">A</div><div class="k" data-k="back">S</div><div class="k" data-k="right">D</div></div>
       <div class="k wide" data-k="jump">JUMP</div>
     </div>
-    <div id="hud-help">R restart · T stage · G ghost · Esc menu</div>
+    <div id="hud-help">R restart · T checkpoint · G ghost · Esc menu</div>
   </div>
 
   <!-- ===== Main menu ===== -->
@@ -136,6 +139,7 @@
           <label class="check"><input type="checkbox" id="set-autobhop" /> Auto-bhop (hold jump)</label>
           <label class="check"><input type="checkbox" id="set-keys" /> Show key display</label>
           <label class="check"><input type="checkbox" id="set-hints" /> Show tutorial hints</label>
+          <label class="check"><input type="checkbox" id="set-graph" /> Show speed graph</label>
           <label class="slider">Air accelerate <input type="range" id="set-aa" min="10" max="1000" step="10" /><output></output></label>
         </section>
         <section>
@@ -166,7 +170,9 @@
         <li><b>Too high? Let go a bit.</b> Holding the key too long climbs you over the top. Tap it to stay in the middle of the ramp.</li>
         <li><b>Follow the ramp with your mouse.</b> On curves, turn smoothly so you keep looking along the ramp.</li>
         <li><b>Air strafe to steer.</b> In the air, hold <kbd>A</kbd> + move mouse left, or <kbd>D</kbd> + move mouse right. Match key and mouse direction (that's your <i>sync</i>).</li>
-        <li><b>Fell?</b> You go back to the start of the stage. The clock keeps running, so try again!</li>
+        <li><b>Keep your momentum.</b> Maps are one continuous line: every map starts with a big curved drop to build speed. Stay above 1200 u/s to build a <i>speed combo</i>. Slamming into ramps or clipping edges <i>scrubs</i> speed and breaks it.</li>
+        <li><b>Fast lines.</b> Some gaps fork: a long jump straight ahead that only fast riders clear, or a safe detour to the side.</li>
+        <li><b>Fell?</b> You respawn standing still at the last checkpoint (the spinning diamond). The clock keeps running.</li>
       </ol>
       <p class="muted">Start with the <b>First Wave</b> tutorial map. It shows hints as you go.</p>
       <div class="panel-foot"><button data-action="back" class="primary">Got it</button></div>

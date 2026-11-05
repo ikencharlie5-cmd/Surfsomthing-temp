@@ -27,7 +27,10 @@ export class MapBuilder {
       spawn: { pos: [0, 100, 0], yaw: 0 },
       brushes: [],
       triggers: [],
-      stages: [],
+      checkpoints: [],
+      line: [],
+      ribs: [],
+      env: opts.env || null,
       killY: opts.killY ?? -5000,
     };
   }
@@ -43,7 +46,7 @@ export class MapBuilder {
     const [sx, sy, sz] = size.map((s) => s / 2);
     const pts = [];
     for (const dx of [-sx, sx]) for (const dy of [-sy, sy]) for (const dz of [-sz, sz]) pts.push([cx + dx, cy + dy, cz + dz]);
-    this.map.brushes.push({ points: pts, kind: opts.kind || 'floor', color: opts.color || COLORS.cyan });
+    this.map.brushes.push({ points: pts, kind: opts.kind || 'floor', color: opts.color || COLORS.cyan, edge: opts.edge });
     return this;
   }
 
@@ -98,16 +101,6 @@ export class MapBuilder {
   }
   startZone(min, max) { return this.trigger('start', min, max); }
   endZone(min, max) { return this.trigger('end', min, max); }
-  /** A stage: entering its zone makes it the respawn point. */
-  stage(spawnPos, yawDeg, zoneMin, zoneMax) {
-    const index = this.map.stages.length;
-    this.map.stages.push({ pos: spawnPos, yaw: (yawDeg * Math.PI) / 180 });
-    if (zoneMin) this.trigger('stage', zoneMin, zoneMax, { stage: index });
-    return this;
-  }
-  /** Touching this sends you back to the current stage spawn. */
-  resetZone(min, max) { return this.trigger('reset', min, max); }
-  hint(min, max, text) { return this.trigger('hint', min, max, { text }); }
 
   build() { return this.map; }
 }
@@ -150,30 +143,37 @@ export function wave(a, b, amplitude, waves = 1, steps = 16) {
   return out;
 }
 
-// ---------------------------------------------------------------------------
-// Course: author a stage as a sequence of moves (straight, curve, wave, gap).
-//
-// Heading is in degrees, using the same convention as player yaw:
-// 0 = looking down -Z, 90 = looking down -X (positive = turn left).
-// ---------------------------------------------------------------------------
-
 const D2R = Math.PI / 180;
 export const fwdOf = (h) => [-Math.sin(h * D2R), -Math.cos(h * D2R)];
 export const rightOf = (h) => [Math.cos(h * D2R), -Math.sin(h * D2R)];
 
+// ---------------------------------------------------------------------------
+// Course: author a continuous surf line as a chain of moves.
+//
+// Heading is in degrees, using the same convention as player yaw:
+// 0 = looking down -Z, 90 = looking down -X (positive = turn left).
+//
+// Ramp options: width/height (of each slope), color, sides, face (which slope
+// the intended line uses, 'left'|'right'), minSpeed (slowest expected rider,
+// used for automatic gap drops), tunnel (enclosure: { side, top, bottom,
+// ceiling, color }).
+// ---------------------------------------------------------------------------
+
 export class Course {
   /**
    * @param {(path:number[][], opts:object)=>void} sink receives finished ramps
-   * @param {object} opts default ramp options { width, height, color, sides, face }
-   *   face: which slope the intended line uses ('left'|'right'), used by the bot.
+   * @param {object} opts default ramp options
    */
   constructor(sink, opts = {}) {
     this.sink = sink;
-    this.opts = { width: 240, height: 360, color: COLORS.magenta, sides: 'both', face: 'left', ...opts };
+    this.opts = { width: 240, height: 360, color: COLORS.magenta, sides: 'both', face: 'left', tunnel: null, ...opts };
     this.p = [0, 0, 0];
     this.h = 0;
     this.path = [];
-    this.line = []; // guide polyline for bots/progress: {p:[x,y,z], h, gap, face, width}
+    /** guide polyline: {p, h, gap, face, width, height, tunnel} */
+    this.line = [];
+    this.checkpoints = []; // { idx, hint }
+    this.forks = []; // { from, to, speed }
     this.minY = Infinity;
     this.slope = 0.2; // drop per unit length of the last ramp move
   }
@@ -185,8 +185,9 @@ export class Course {
   _begin() { this.path = [[...this.p]]; this._mark(false); }
 
   _mark(gap) {
-    this.line.push({ p: [...this.p], h: this.h, gap, face: this.opts.face, width: this.opts.width });
-    this.minY = Math.min(this.minY, this.p[1] - this.opts.height);
+    const o = this.opts;
+    this.line.push({ p: [...this.p], h: this.h, gap, face: o.face, width: o.width, height: o.height, tunnel: o.tunnel ? { ...o.tunnel } : null, color: o.color });
+    this.minY = Math.min(this.minY, this.p[1] - o.height);
   }
 
   _push() {
@@ -244,32 +245,69 @@ export class Course {
     return this;
   }
 
+  /** Automatic drop for a gap so the slowest expected rider clears it. */
+  autoDrop(length, shift = 0, slope = this.slope, vmin = this.opts.minSpeed ?? 800) {
+    const air = Math.hypot(length, shift) / vmin;
+    return slope * length + 0.5 * 800 * air * air + 80;
+  }
+
   /**
    * Air gap: ends the current ramp, the next move starts a new one.
-   * The drop is computed so that even a slow player (opts.minSpeed) clears
-   * the start of the next ramp: it follows the previous slope plus the
-   * gravity arc for the time spent in the air.
    * @param {number} length horizontal gap
    * @param {number} [shift] sideways offset of the next ramp (+ = right)
-   * @param {object} [opts] ramp option overrides; opts.drop forces a drop
+   * @param {object} [opts] ramp option overrides; opts.drop forces a drop,
+   *   opts.vmin sets the slowest expected rider for this gap only
    */
   gap(length, shift = 0, opts = {}) {
     this._flush();
-    const { drop: forced, ...rampOpts } = opts;
+    const { drop: forced, vmin, ...rampOpts } = opts;
+    const drop = forced ?? this.autoDrop(length, shift, this.slope, vmin);
     Object.assign(this.opts, rampOpts);
-    const vmin = this.opts.minSpeed ?? 800;
-    const air = Math.hypot(length, shift) / vmin;
-    const drop = forced ?? (this.slope * length + 0.5 * 800 * air * air + 80);
     const [fx, fz] = fwdOf(this.h);
     const [rx, rz] = rightOf(this.h);
     this.p = [this.p[0] + fx * length + rx * shift, this.p[1] - drop, this.p[2] + fz * length + rz * shift];
-    this.line.push({ p: [...this.p], h: this.h, gap: true, face: this.opts.face, width: this.opts.width });
+    this._mark(true);
     this.path = [[...this.p]];
-    this.minY = Math.min(this.minY, this.p[1] - this.opts.height);
     return this;
   }
 
-  /** Finish the ramp; returns a point ahead of the end (for gates). */
+  /** Mark a checkpoint at the start of the current ramp (call right after gap()). */
+  checkpoint(hint = null) {
+    if (this.path.length !== 1) throw new Error('checkpoint() must be called at the start of a ramp');
+    this.checkpoints.push({ idx: this.line.length - 1, hint });
+    return this;
+  }
+
+  /**
+   * Speed-sensitive split. Straight ahead, a long gap that only a rider
+   * carrying `speed` can clear lands directly on the next ramp. Off to the
+   * side, a safe detour ramp leads to the same place for slower riders.
+   * Call at the end of a ramp. Enclosures are switched off for the fork.
+   */
+  fork({ length = 4200, speed = 2000, shift = -650, gapIn = 1000, gapOut = 900, color } = {}) {
+    this._flush();
+    const tunnel = this.opts.tunnel;
+    this.opts.tunnel = null;
+    if (this.line.length) this.line[this.line.length - 1].tunnel = null;
+    const from = this.line.length - 1;
+    const air = length / speed;
+    let dropFast = this.slope * length + 0.5 * 800 * air * air + 80;
+    const g1 = this.autoDrop(gapIn, shift);
+    const L = length - gapIn - gapOut;
+    const vmin = this.opts.minSpeed ?? 800;
+    const K = 0.5 * 800 * (Math.hypot(gapOut, shift) / vmin) ** 2 + 80;
+    // detour slope s solves: g1 + s*L + (s*gapOut + K) = dropFast
+    let sl = (dropFast - g1 - K) / (L + gapOut);
+    if (sl < 0.1) { sl = 0.1; dropFast = g1 + sl * (L + gapOut) + K; }
+    const mainColor = this.opts.color;
+    this.gap(gapIn, shift, color ? { color } : {});
+    this.straight(L, sl * L);
+    this.gap(gapOut, -shift, { drop: sl * gapOut + K, color: mainColor, tunnel });
+    this.forks.push({ from, to: this.line.length - 1, speed });
+    return this;
+  }
+
+  /** Finish the ramp; returns a point ahead of the end (for the finish gate). */
   end(ahead = 600) {
     this._flush();
     const [fx, fz] = fwdOf(this.h);
@@ -277,52 +315,126 @@ export class Course {
   }
 }
 
+/** Where to respawn (standing still) for a checkpoint at line index idx. */
+function checkpointSpawn(line, idx) {
+  const e = line[idx];
+  const n = line[Math.min(idx + 1, line.length - 1)];
+  const dx = n.p[0] - e.p[0], dz = n.p[2] - e.p[2];
+  const d = Math.hypot(dx, dz) || 1;
+  const along = Math.min(350, d * 0.3);
+  const t = along / d;
+  const ridgeY = e.p[1] + (n.p[1] - e.p[1]) * t;
+  const h = Math.atan2(-dx, -dz);
+  const rx = -dz / d, rz = dx / d;
+  const lat = (e.face === 'right' ? 1 : -1) * e.width * 0.42;
+  const faceY = ridgeY - (Math.abs(lat) / e.width) * e.height;
+  return {
+    pos: [e.p[0] + dx * t + rx * lat, faceY + 36 + 70, e.p[2] + dz * t + rz * lat],
+    yaw: h,
+  };
+}
+
+/** Build tunnel/canyon walls, ceilings and glowing ribs along the guide line. */
+function addEnclosure(m, line) {
+  const sec = (e, t) => {
+    const [rx, rz] = rightOf(e.h);
+    const L = e.width + t.side;
+    const yb = e.p[1] - e.height - (t.bottom ?? 700);
+    const yt = e.p[1] + (t.top ?? 750);
+    return { rx, rz, L, yb, yt, p: e.p };
+  };
+  const pt = (s, lat, y) => [s.p[0] + s.rx * lat, y, s.p[2] + s.rz * lat];
+  for (let i = 0; i < line.length - 1; i++) {
+    const t = line[i].tunnel;
+    if (!t) continue;
+    const a = sec(line[i], t), b = sec(line[i + 1], t);
+    const color = t.color || COLORS.purple;
+    const thick = 60;
+    for (const side of [-1, 1]) {
+      const pts = [];
+      for (const s of [a, b]) {
+        for (const lat of [s.L, s.L + thick]) {
+          pts.push(pt(s, side * lat, s.yb), pt(s, side * lat, s.yt + (t.ceiling ? thick : 0)));
+        }
+      }
+      m.brushes.push({ points: pts, kind: 'wall', color, edge: 0.45 });
+    }
+    if (t.ceiling) {
+      const pts = [];
+      for (const s of [a, b]) {
+        for (const lat of [-(s.L + thick), s.L + thick]) pts.push(pt(s, lat, s.yt), pt(s, lat, s.yt + thick));
+      }
+      m.brushes.push({ points: pts, kind: 'wall', color, edge: 0.45 });
+    }
+    // ribs: glowing frames along the enclosure
+    const len = Math.hypot(b.p[0] - a.p[0], b.p[2] - a.p[2]);
+    const n = Math.max(1, Math.round(len / (t.ribSpacing ?? 900)));
+    for (let k = 0; k < n; k++) {
+      const f = k / n;
+      const lerp = (u, v) => u + (v - u) * f;
+      const s = {
+        p: [lerp(a.p[0], b.p[0]), lerp(a.p[1], b.p[1]), lerp(a.p[2], b.p[2])],
+        rx: lerp(a.rx, b.rx), rz: lerp(a.rz, b.rz), L: lerp(a.L, b.L) - 4,
+        yb: lerp(a.yb, b.yb), yt: lerp(a.yt, b.yt) - 4,
+      };
+      const ribH = t.ceiling ? null : s.yt;
+      const lo = s.p[1] - line[i].height - 150;
+      const segs = [
+        ...pt(s, -s.L, lo), ...pt(s, -s.L, ribH ?? s.yt),
+        ...pt(s, s.L, lo), ...pt(s, s.L, ribH ?? s.yt),
+      ];
+      if (t.ceiling) segs.push(...pt(s, -s.L, s.yt), ...pt(s, s.L, s.yt));
+      m.ribs.push({ segs, color: t.ribColor || color });
+    }
+  }
+}
+
 /**
- * Add a staged course to a MapBuilder.
+ * Build a whole continuous map: start platform, the course, checkpoints,
+ * enclosures and the finish gate.
  * @param {MapBuilder} b
- * @param {object} cfg { origin:[x,y,z], heading, hint, ramp: opts, build:(course)=>void, last:boolean }
+ * @param {object} cfg { origin, heading, ramp, build:(course)=>void, startHint, platformColor }
  */
-export function addStage(b, cfg) {
+export function addCourse(b, cfg) {
   const m = b.map;
-  const index = m.stages.length;
   const h = cfg.heading ?? 0;
-  const o = cfg.origin;
+  const o = cfg.origin ?? [0, 0, 0];
   const ramp = { width: 240, height: 360, color: COLORS.magenta, sides: 'both', face: 'left', ...(cfg.ramp || {}) };
   const [fx, fz] = fwdOf(h);
   const [rx, rz] = rightOf(h);
 
-  // Spawn platform. The ramp ridge begins just past its front edge and offset
-  // to the side, so walking straight forward drops you onto the intended face.
-  const faceSign = ramp.face === 'left' ? 1 : -1; // ridge is to the right of the platform for a left face
+  // Spawn platform. The first ramp's ridge begins under its front edge and
+  // offset to the side, so walking forward drops you onto the intended face.
+  const faceSign = ramp.face === 'left' ? 1 : -1;
   const plat = 420;
   const latOff = faceSign * ramp.width * 0.5;
-  const platColor = cfg.platformColor || COLORS.cyan;
-  // platform as rotated box (8 points)
   const pts = [];
   for (const a of [-1, 1]) for (const c of [-1, 1]) for (const yy of [0, -48]) {
     pts.push([o[0] + fx * a * plat / 2 + rx * c * plat / 2, o[1] + yy, o[2] + fz * a * plat / 2 + rz * c * plat / 2]);
   }
-  m.brushes.push({ points: pts, kind: 'floor', color: platColor });
-
+  m.brushes.push({ points: pts, kind: 'floor', color: cfg.platformColor || COLORS.cyan });
   const spawn = [o[0], o[1] + 40, o[2]];
+  m.spawn = { pos: spawn, yaw: h * D2R };
+  b.startZone([o[0] - plat / 2 - 60, o[1] - 10, o[2] - plat / 2 - 60], [o[0] + plat / 2 + 60, o[1] + 200, o[2] + plat / 2 + 60]);
+
   const course = new Course((path, opts) => b.ramp(path, opts), ramp);
   const ahead = plat / 2 - 100;
-  const start = [o[0] + fx * ahead + rx * latOff, o[1] - 80, o[2] + fz * ahead + rz * latOff];
-  course.at(start, h);
+  course.at([o[0] + fx * ahead + rx * latOff, o[1] - 80, o[2] + fz * ahead + rz * latOff], h);
   cfg.build(course);
   const g = course.end(cfg.gateAhead ?? 700);
-  const resetY = course.minY - 1200;
+  const line = course.line;
 
-  m.stages.push({ pos: spawn, yaw: h * D2R, resetY, hint: cfg.hint || null, line: course.line, heading: h });
-  if (index === 0) {
-    m.spawn = { pos: spawn, yaw: h * D2R };
-    b.startZone([o[0] - plat / 2 - 60, o[1] - 10, o[2] - plat / 2 - 60], [o[0] + plat / 2 + 60, o[1] + 200, o[2] + plat / 2 + 60]);
-  }
+  m.line = line;
+  m.forks = course.forks;
+  m.checkpoints = [
+    { idx: 0, pos: spawn, yaw: h * D2R, hint: cfg.startHint || null, start: true },
+    ...course.checkpoints.map((c) => ({ idx: c.idx, hint: c.hint, ...checkpointSpawn(line, c.idx) })),
+  ];
+  addEnclosure(m, line);
+
   const gy = g[1] - 500;
   const gs = cfg.gateSize ?? 1100;
-  const trig = { min: [g[0] - gs, gy - gs, g[2] - gs], max: [g[0] + gs, gy + gs, g[2] + gs], heading: course.h, center: [g[0], gy, g[2]] };
-  if (cfg.last) b.trigger('end', trig.min, trig.max, { heading: trig.heading, center: trig.center, stage: index });
-  else b.trigger('teleport', trig.min, trig.max, { target: index + 1, heading: trig.heading, center: trig.center, stage: index });
-  m.killY = Math.min(m.killY, resetY - 2000);
+  b.trigger('end', [g[0] - gs, gy - gs, g[2] - gs], [g[0] + gs, gy + gs, g[2] + gs], { heading: course.h, center: [g[0], gy, g[2]] });
+  m.killY = Math.min(m.killY, course.minY - 4000);
   return course;
 }

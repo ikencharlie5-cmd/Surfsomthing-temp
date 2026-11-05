@@ -1,38 +1,25 @@
-import { MapBuilder, addStage, COLORS } from './builder.js';
+import { MapBuilder, addCourse, COLORS } from './builder.js';
 
 export default function build() {
   const b = new MapBuilder('neon-drift', 'Neon Drift', {
     difficulty: 'easy',
-    description: 'Five flowing stages of wide ramps. A good first real map.',
+    description: 'Wide, flowing ramps under the open sky. One fast-line shortcut.',
   });
-  const S = 25000;
-  const ramp = { width: 260, height: 380 };
-
-  addStage(b, {
-    origin: [0, 0, 0], heading: 0,
-    ramp: { ...ramp, color: COLORS.cyan },
-    build: (c) => c.straight(5000, 1050).curve(60, 5000, 950).straight(2500, 550),
-  });
-  addStage(b, {
-    origin: [S, 0, 0], heading: 0,
-    ramp: { ...ramp, color: COLORS.magenta },
-    build: (c) => c.straight(3000, 700).gap(650).wave(6500, 1400, 450, 1).gap(650).straight(3000, 700),
-  });
-  addStage(b, {
-    origin: [S * 2, 0, 0], heading: 0,
-    ramp: { ...ramp, color: COLORS.purple, face: 'right' },
-    build: (c) => c.straight(2500, 600).curve(-110, 4500, 1700).straight(2200, 500),
-  });
-  addStage(b, {
-    origin: [S * 3, 0, 0], heading: 0,
-    ramp: { ...ramp, color: COLORS.orange },
-    build: (c) => c.straight(3500, 800).gap(800).curve(45, 6000, 950).gap(800, -350).straight(3500, 800),
-  });
-  addStage(b, {
-    origin: [S * 4, 0, 0], heading: 0,
-    ramp: { ...ramp, color: COLORS.yellow },
-    build: (c) => c.straight(3000, 700).curve(90, 4000, 1300).gap(700).straight(4000, 900),
-    last: true,
+  addCourse(b, {
+    ramp: { width: 270, height: 390, color: COLORS.cyan, minSpeed: 1100 },
+    build: (c) => c
+      .curve(110, 3800, 2400).straight(2500, 300)
+      .gap(800, 0, { color: COLORS.magenta }).wave(6500, 650, 380, 1)
+      .gap(800).curve(55, 6000, 600)
+      .gap(900, 0, { color: COLORS.purple }).checkpoint()
+      .straight(3500, 1050).straight(2500, 150)
+      .fork({ length: 4400, speed: 1900, shift: -600, gapIn: 1200, gapOut: 1100, color: COLORS.yellow })
+      .straight(3500, 300)
+      .gap(900, 0, { color: COLORS.orange }).checkpoint()
+      .straight(3500, 1050).curve(-60, 5500, 500)
+      .gap(850, 350).straight(3500, 300)
+      .gap(850, -350, { color: COLORS.cyan }).wave(6000, 250, 260, 1)
+      .gap(900).straight(3000, 300),
   });
   return b.build();
 }

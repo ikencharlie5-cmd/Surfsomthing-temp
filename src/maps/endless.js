@@ -105,8 +105,12 @@ export class EndlessTrack {
     if (this.drift > 80) turnSign = -1;
     if (this.drift < -80) turnSign = 1;
     const inside = turnSign !== outside;
-    if (kind === 'straight') {
-      const L = n === 0 ? 5000 : slope < 0 ? lerp(2000, 3000, r()) : lerp(3000, 5000, r());
+    if (n === 0) {
+      // big curved drop-in to build momentum before the first gap
+      c.curve(100, 3800, 2300).straight(1500, 250);
+      this.drift += 100;
+    } else if (kind === 'straight') {
+      const L = slope < 0 ? lerp(2000, 3000, r()) : lerp(3000, 5000, r());
       c.straight(L, L * slope);
     } else if (kind === 'curve' || kind === 'combo') {
       if (kind === 'combo') { const L = lerp(1200, 2400, r()); c.straight(L, L * slope); }

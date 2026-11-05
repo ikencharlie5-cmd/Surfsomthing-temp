@@ -1,39 +1,25 @@
-import { MapBuilder, addStage, COLORS } from './builder.js';
+import { MapBuilder, addCourse, COLORS } from './builder.js';
 
 export default function build() {
   const b = new MapBuilder('tutorial', 'First Wave', {
     difficulty: 'tutorial',
-    description: 'Learn to surf: ramps, gaps, curves and air strafing.',
+    description: 'Learn to surf: a big drop-in, gaps, air strafing and keeping your speed.',
   });
-  const S = 25000;
-
-  addStage(b, {
-    origin: [0, 0, 0], heading: 0,
-    hint: 'Walk forward (W) off the platform. On the ramp, let go of W and hold D, the key toward the ramp. Look along the ramp. Too much D pushes you over the top; too little and you slide off the bottom.',
-    ramp: { width: 300, height: 420, color: COLORS.cyan },
-    build: (c) => c.straight(9000, 1700),
-  });
-
-  addStage(b, {
-    origin: [S, 0, 0], heading: 0,
-    hint: 'Gaps: when you fly off the end of a ramp, keep looking ahead and land on the same side of the next ramp. Tap D to stay high on the ramp.',
-    ramp: { width: 300, height: 420, color: COLORS.magenta },
-    build: (c) => c.straight(4500, 900).gap(700).straight(4500, 950).gap(700).straight(4000, 850),
-  });
-
-  addStage(b, {
-    origin: [S * 2, 0, 0], heading: 0,
-    hint: 'Curves: hold D and turn the mouse slowly and smoothly to the right so you keep looking along the ramp as it bends.',
-    ramp: { width: 300, height: 420, color: COLORS.purple },
-    build: (c) => c.straight(2500, 550).curve(90, 5000, 1500).straight(2500, 550),
-  });
-
-  addStage(b, {
-    origin: [S * 3, 0, 0], heading: 0,
-    hint: 'Air strafing: in the air, hold A and move the mouse LEFT at the same time to drift left. Hold D and move the mouse RIGHT to drift right. Line yourself up with the next ramp.',
-    ramp: { width: 300, height: 420, color: COLORS.green },
-    build: (c) => c.straight(4500, 950).gap(900, -450).straight(4000, 900).gap(900).straight(4000, 850),
-    last: true,
+  addCourse(b, {
+    ramp: { width: 320, height: 440, color: COLORS.cyan, minSpeed: 1000 },
+    startHint: 'Walk forward (W) off the platform. On the ramp, let go of W and hold D, the key toward the ramp. This big curved drop builds your speed: turn the mouse slowly right to follow it.',
+    build: (c) => c
+      .curve(100, 4000, 2300).straight(3000, 380)
+      .gap(800, 0, { color: COLORS.magenta }).checkpoint('Gaps: fly off the end and land on the same side of the next ramp. Tap D to stay high. Fall, and you respawn at the last checkpoint.')
+      .straight(3500, 1000)
+      .gap(800).straight(4000, 420)
+      .gap(900, 0, { color: COLORS.green }).checkpoint('Air strafing: the next ramp is offset to the LEFT. In the air, hold A and move the mouse left to drift onto it.')
+      .straight(3500, 1000)
+      .gap(1100, -450).straight(3500, 380)
+      .gap(1100, 450).straight(3000, 360)
+      .gap(900, 0, { color: COLORS.purple }).checkpoint('Keep your speed! Clean landings keep your combo going. Clipping edges or slamming into ramps SCRUBS speed.')
+      .straight(3500, 1000).curve(70, 5000, 650)
+      .gap(900).straight(4000, 420),
   });
   return b.build();
 }

@@ -19,7 +19,7 @@ export function fmtDelta(d) {
 
 const ACTION_LABELS = {
   forward: 'Forward', back: 'Back', left: 'Strafe left', right: 'Strafe right',
-  jump: 'Jump', restart: 'Restart run', stage: 'Back to stage', ghost: 'Toggle ghost',
+  jump: 'Jump', restart: 'Restart run', stage: 'Back to checkpoint', ghost: 'Toggle ghost',
 };
 
 export class UI {
@@ -48,8 +48,11 @@ export class UI {
       root: $('#hud'), timer: $('#hud-timer'), map: $('#hud-map'), stage: $('#hud-stage'), pb: $('#hud-pb'),
       split: $('#hud-split'), hint: $('#hud-hint'), msg: $('#hud-center-msg'), speed: $('#hud-speed'),
       bar: $('#hud-speedbar-fill'), sync: $('#hud-sync-val'), keys: $('#hud-keys'), fps: $('#fps'),
-      bottom: $('#hud-bottom'),
+      bottom: $('#hud-bottom'), combo: $('#hud-combo'), scrub: $('#hud-scrub'), graph: $('#hud-graph'),
     };
+    this.graphCtx = this.hud.graph.getContext('2d');
+    this.scrubTimer = 0;
+    this.lastMult = 1;
   }
 
   // ------------------------------------------------------------------ screens
@@ -76,7 +79,7 @@ export class UI {
         <div class="diff ${m.difficulty}">${m.difficulty}</div>
         <div class="title">${esc(m.name)}</div>
         <div class="desc">${esc(m.description)}</div>
-        <div class="muted small">${m.stages.length} stages</div>
+        <div class="muted small">${m.checkpoints.length - 1} checkpoints${m.forks?.length ? ` · ${m.forks.length} fast line${m.forks.length > 1 ? 's' : ''}` : ''}${m.env?.sky === false ? ' · enclosed' : m.ribs?.length ? ' · canyon' : ' · open sky'}</div>
         <div class="pb">${pb ? 'PB ' + fmtTime(pb.time) : 'No time set'}</div>`;
       card.addEventListener('keydown', (e) => { if (e.key === 'Enter') this.h.onAction('play-map', { map: m.id }); });
       list.appendChild(card);
@@ -126,6 +129,8 @@ export class UI {
     $('#finish-time').textContent = fmtTime(r.time);
     const bits = [];
     if (r.prevBest != null) bits.push(`${r.pb ? 'Previous best' : 'Personal best'} ${fmtTime(r.prevBest)} (${fmtDelta(r.time - r.prevBest)})`);
+    bits.push(`Top speed ${r.topSpeed} u/s`, `Best combo ${r.combo}`);
+    if (r.resets) bits.push(`${r.resets} fall${r.resets > 1 ? 's' : ''}`);
     if (r.sync != null) bits.push(`Sync ${r.sync}%`);
     $('#finish-detail').textContent = bits.join(' · ');
     const sp = $('#finish-splits');
@@ -135,7 +140,7 @@ export class UI {
       const d = pbt != null ? t - pbt : null;
       const row = document.createElement('div');
       row.className = 'split';
-      row.innerHTML = `<span>Stage ${i + 2}</span><span>${fmtTime(t)} <span class="d ${d == null ? '' : d < 0 ? 'good' : 'bad'}">${d == null ? '' : fmtDelta(d)}</span></span>`;
+      row.innerHTML = `<span>Checkpoint ${i + 1}</span><span>${fmtTime(t)} <span class="d ${d == null ? '' : d < 0 ? 'good' : 'bad'}">${d == null ? '' : fmtDelta(d)}</span></span>`;
       sp.appendChild(row);
     });
     const next = $('#finish-next');
@@ -150,7 +155,7 @@ export class UI {
     title.textContent = r.record ? 'New endless record!' : 'Wiped out';
     title.classList.toggle('record', r.record);
     $('#finish-time').textContent = `${r.score} ramp${r.score === 1 ? '' : 's'}`;
-    $('#finish-detail').textContent = `Best ${r.best} · Seed "${r.seed}" · ${fmtTime(r.time)}`;
+    $('#finish-detail').textContent = `Best ${r.best} · Seed "${r.seed}" · ${fmtTime(r.time)} · Top ${r.topSpeed} u/s · Best combo ${r.combo}`;
     $('#finish-splits').innerHTML = '';
     const next = $('#finish-next');
     next.textContent = 'New seed';
@@ -194,6 +199,7 @@ export class UI {
     bindCheck('set-autobhop', 'autobhop');
     bindCheck('set-keys', 'showKeys');
     bindCheck('set-hints', 'hints');
+    bindCheck('set-graph', 'speedGraph');
     bindRange('set-aa', 'airaccelerate', (v) => String(v));
     bindRange('set-vol', 'volume', (v) => Math.round(v * 100) + '%');
     bindRange('set-music', 'music', (v) => Math.round(v * 100) + '%');
@@ -295,7 +301,7 @@ export class UI {
       H.pb.textContent = extra.best ? `BEST ${extra.best}` : '';
     } else {
       H.timer.textContent = h.status === 'start' ? 'START' : fmtTime(h.time);
-      H.stage.textContent = `STAGE ${h.stage + 1}/${h.stages}`;
+      H.stage.textContent = `CP ${h.cp}/${h.cps - 1}`;
       H.pb.textContent = extra.pb != null ? `PB ${fmtTime(extra.pb)}` : '';
     }
     H.timer.classList.toggle('idle', h.status === 'start');
@@ -306,10 +312,75 @@ export class UI {
     const glow = sp > 2500 ? 'var(--yellow)' : sp > 1400 ? 'var(--pink)' : 'var(--cyan)';
     H.bottom.style.setProperty('--speed-glow', glow);
     H.sync.textContent = h.sync == null ? '--' : h.sync + '%';
+    this._combo(h);
+    if (this.scrubTimer > 0) { this.scrubTimer -= dt; if (this.scrubTimer <= 0) H.scrub.classList.add('hidden'); }
+    H.graph.classList.toggle('hidden', this.settings.speedGraph === false);
+    if (this.settings.speedGraph !== false) this._graph(h);
     H.keys.classList.toggle('hidden', !this.settings.showKeys);
     if (this.settings.showKeys && extra.input) {
       for (const el of H.keys.children) this._keyState(el, extra.input);
     }
+  }
+
+  scrub(loss) {
+    const el = this.hud.scrub;
+    el.textContent = `SCRUBBED -${loss}`;
+    el.classList.remove('hidden');
+    el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
+    this.scrubTimer = 1.1;
+  }
+
+  _combo(h) {
+    const el = this.hud.combo;
+    const c = h.combo;
+    if (!c || c.points < 1 || h.status !== 'running') { el.classList.add('hidden'); this.lastMult = 1; return; }
+    el.classList.remove('hidden');
+    el.classList.toggle('fading', c.below > 0);
+    el.children[0].textContent = 'x' + c.mult;
+    el.children[1].textContent = Math.round(c.points).toLocaleString();
+    el.children[3].firstElementChild.style.width = (c.mult >= 10 ? 100 : ((c.time % 3) / 3) * 100).toFixed(0) + '%';
+    if (c.mult !== this.lastMult) {
+      el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+      this.lastMult = c.mult;
+    }
+  }
+
+  /** Speed over the last 6 seconds, with scrubs marked in red. */
+  _graph(h) {
+    const ctx = this.graphCtx;
+    const W = 240, Hh = 70, N = h.hist.length;
+    ctx.clearRect(0, 0, W, Hh);
+    ctx.fillStyle = 'rgba(10, 4, 24, 0.45)';
+    ctx.fillRect(0, 0, W, Hh);
+    const max = 3500;
+    const y = (v) => Hh - 4 - (Math.min(v, max) / max) * (Hh - 10);
+    // combo threshold line
+    ctx.strokeStyle = 'rgba(255, 225, 77, 0.35)';
+    ctx.setLineDash([3, 4]);
+    ctx.beginPath(); ctx.moveTo(0, y(1200)); ctx.lineTo(W, y(1200)); ctx.stroke();
+    ctx.setLineDash([]);
+    const grad = ctx.createLinearGradient(0, Hh, 0, 0);
+    grad.addColorStop(0, '#00f0ff'); grad.addColorStop(0.5, '#ff2bd6'); grad.addColorStop(1, '#ffe14d');
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    const count = Math.min(N, h.histPos);
+    for (let k = 0; k < count; k++) {
+      const v = h.hist[(h.histPos - count + k) % N];
+      const x = W - (count - k) * (W / N);
+      if (k === 0) ctx.moveTo(x, y(v)); else ctx.lineTo(x, y(v));
+    }
+    ctx.stroke();
+    ctx.fillStyle = '#ff4466';
+    for (const m of h.scrubs) {
+      const age = h.histPos - m;
+      if (age < 0 || age >= N) continue;
+      const x = W - age * (W / N);
+      ctx.fillRect(x - 1, 2, 2, Hh - 4);
+    }
+    ctx.fillStyle = 'rgba(236, 230, 255, 0.55)';
+    ctx.font = '10px Orbitron, sans-serif';
+    ctx.fillText('SPEED', 6, 12);
   }
 
   _keyState(el, input) {

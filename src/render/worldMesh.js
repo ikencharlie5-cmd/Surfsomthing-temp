@@ -3,9 +3,9 @@ import * as THREE from 'three';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
-import { SUN_DIR, FOG_COLOR } from './renderer.js';
+import { SUN_DIR, FOG_COLOR, FOG_NEAR, FOG_FAR } from './renderer.js';
 
-const KIND = { surf: 0, floor: 1 };
+const KIND = { surf: 0, floor: 1, wall: 2 };
 
 let sharedFaceMat = null;
 const lineMats = new Set();
@@ -17,8 +17,8 @@ export function faceMaterial() {
       uTime: { value: 0 },
       uSun: { value: SUN_DIR },
       uFogColor: { value: FOG_COLOR },
-      uFogNear: { value: 9000 },
-      uFogFar: { value: 60000 },
+      uFogNear: FOG_NEAR,
+      uFogFar: FOG_FAR,
     },
     vertexShader: FACE_VS,
     fragmentShader: FACE_FS,
@@ -44,6 +44,7 @@ export function buildBrushMesh(brushes) {
   for (const br of brushes) {
     const c = br.meta.color || [1, 0.2, 0.8];
     const k = KIND[br.meta.kind] ?? 0;
+    const edgeScale = br.meta.edge ?? 1;
     for (const f of br.faces) {
       const poly = f.poly;
       const isSurf = f.n.y > 0.05 && f.n.y < 0.7;
@@ -53,7 +54,7 @@ export function buildBrushMesh(brushes) {
           pos.push(p.x, p.y, p.z);
           nrm.push(f.n.x, f.n.y, f.n.z);
           col.push(c[0], c[1], c[2]);
-          kind.push(k === 1 && fk === 0 ? 0 : fk);
+          kind.push(k === 2 ? 2 : k === 1 && fk === 0 ? 0 : fk);
         }
       }
     }
@@ -62,7 +63,7 @@ export function buildBrushMesh(brushes) {
       // underside edges are dimmer
       const low = Math.min(a.y, b.y) < (br.max.y + br.min.y) / 2 && Math.abs(a.y - b.y) < 1 ? 0.35 : 1;
       linePos.push(a.x, a.y, a.z, b.x, b.y, b.z);
-      const e = 2.4 * low;
+      const e = 2.4 * low * edgeScale;
       lineCol.push(c[0] * e, c[1] * e, c[2] * e, c[0] * e, c[1] * e, c[2] * e);
     }
   }
@@ -90,7 +91,38 @@ export function buildBrushMesh(brushes) {
   return group;
 }
 
-/** Glowing portal ring for teleport/end gates. */
+/** Glowing ribs (tunnel frames) from map.ribs. */
+export function buildRibs(ribs) {
+  const pos = [], col = [];
+  for (const r of ribs) {
+    for (let i = 0; i < r.segs.length; i += 6) {
+      pos.push(...r.segs.slice(i, i + 6));
+      const c = r.color;
+      col.push(c[0] * 1.9, c[1] * 1.9, c[2] * 1.9, c[0] * 1.9, c[1] * 1.9, c[2] * 1.9);
+    }
+  }
+  const g = new LineSegmentsGeometry();
+  g.setPositions(pos);
+  g.setColors(col);
+  const m = new LineMaterial({ vertexColors: true, linewidth: 2.2, worldUnits: false, fog: true });
+  lineMats.add(m);
+  m.addEventListener('dispose', () => lineMats.delete(m));
+  return new LineSegments2(g, m);
+}
+
+/** Floating checkpoint marker: a slim spinning diamond over the respawn point. */
+export function buildCheckpointMarker(cp) {
+  const g = new THREE.Group();
+  g.position.set(cp.pos[0], cp.pos[1] + 160, cp.pos[2]);
+  const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.3, 2.2, 1.2), wireframe: true, fog: true });
+  const d = new THREE.Mesh(new THREE.OctahedronGeometry(45, 0), mat);
+  d.scale.set(1, 1.8, 1);
+  g.add(d);
+  g.userData.update = (t) => { d.rotation.y = t * 1.5; d.position.y = Math.sin(t * 2) * 12; };
+  return g;
+}
+
+/** Glowing portal ring for the finish gate. */
 export function buildGate(trigger, end = false) {
   const g = new THREE.Group();
   const c = trigger.center;

@@ -1,10 +1,10 @@
-// Game session: physics world, run timer, stages, ghost, endless streaming.
+// Game session: physics world, run timer, checkpoints, combo, ghost, endless streaming.
 import * as THREE from 'three';
 import { Brush } from './physics/brush.js';
 import { World, Trigger } from './physics/world.js';
 import { Movement, Player, HULL, EYE_OFFSET } from './physics/movement.js';
 import { V3 } from './physics/vec.js';
-import { buildBrushMesh, buildGate, buildZoneBox, faceMaterial } from './render/worldMesh.js';
+import { buildBrushMesh, buildGate, buildZoneBox, buildRibs, buildCheckpointMarker, faceMaterial } from './render/worldMesh.js';
 import { disposeTree } from './render/renderer.js';
 import { EndlessTrack } from './maps/endless.js';
 import { SurfBot } from './sim/bot.js';
@@ -13,6 +13,7 @@ import * as store from './storage.js';
 export const TICK = 1 / 100;
 export const GHOST_STEP = 2; // record every 2 ticks (50 Hz)
 const START_SPEED_CAP = 350;
+export const COMBO_SPEED = 1200; // u/s needed to keep a speed combo alive
 
 export class Game {
   /**
@@ -52,6 +53,7 @@ export class Game {
     this.r.setWorld(this.root);
     this.triggers = [];
     this.startTrig = null;
+    this.endTrig = null;
     this.ghostFrames = null;
     this.rec = [];
     this.syncGood = 0; this.syncTotal = 0;
@@ -65,11 +67,16 @@ export class Game {
     this.demo = demo;
     this.map = map;
     this._pb = undefined;
-    this.stages = map.stages;
+    this.line = map.line;
+    this.cps = map.checkpoints;
+    this.env = map.env || {};
+    this.r.setEnv(this.env);
     const brushes = map.brushes.map((b) => this.world.add(new Brush(b.points, b)));
     this.root.add(buildBrushMesh(brushes));
+    if (map.ribs?.length) this.root.add(buildRibs(map.ribs));
     let minY = 0;
     for (const b of brushes) minY = Math.min(minY, b.min.y);
+    this.mapMinY = minY;
     this.r.setFloorY(minY - 9000);
     for (const t of map.triggers) {
       const trig = new Trigger(t.min, t.max, t);
@@ -78,10 +85,15 @@ export class Game {
         this.startTrig = trig;
         const z = buildZoneBox(t);
         this.root.add(z); this.animated.push(z);
-      } else if (t.type === 'teleport' || t.type === 'end') {
-        const g = buildGate(t, t.type === 'end');
+      } else if (t.type === 'end') {
+        this.endTrig = trig;
+        const g = buildGate(t, true);
         this.root.add(g); this.animated.push(g);
       }
+    }
+    for (let i = 1; i < this.cps.length; i++) {
+      const m = buildCheckpointMarker(this.cps[i]);
+      this.root.add(m); this.animated.push(m);
     }
     if (!demo) this.ghostFrames = this.settings.ghost ? store.loadGhost(map.id) : null;
     this.restart();
@@ -92,6 +104,8 @@ export class Game {
     this._reset('endless');
     this.demo = demo;
     this.seed = seed;
+    this.env = {};
+    this.r.setEnv(this.env);
     this.track = new EndlessTrack(seed);
     this.pieceGroups = new Map();
     this.pieceBrushes = new Map();
@@ -102,8 +116,9 @@ export class Game {
     const z = buildZoneBox(sz);
     this.root.add(z); this.animated.push(z);
     for (let i = 0; i < 5; i++) this._addPiece(this.track.next());
-    this.stages = [{ pos: this.track.spawn.pos, yaw: 0, resetY: -Infinity }];
-    this.map = { id: 'endless', name: 'Endless', stages: this.stages };
+    this.line = this.track.line;
+    this.cps = [{ idx: 0, pos: this.track.spawn.pos, yaw: 0, start: true }];
+    this.map = { id: 'endless', name: 'Endless' };
     this.endlessBest = store.getEndlessBest().score;
     this.restart();
   }
@@ -135,36 +150,39 @@ export class Game {
   // ------------------------------------------------------------------ run control
 
   restart() {
-    this.run = { status: 'start', ticks: 0, stage: 0, splits: [], resets: 0 };
+    this.run = { status: 'start', ticks: 0, cp: 0, splits: [], resets: 0, bestCombo: 0, topSpeed: 0 };
     this.rec = [];
     this.syncGood = 0; this.syncTotal = 0;
     this.trail = [];
-    if (this.mode === 'endless') {
-      this.progress = new SurfBot(this.track.line);
-      this.piece = 0;
-      this.distance = 0;
-    }
-    this._spawnAt(0);
-    this.bot = null;
+    this.combo = { mult: 1, time: 0, points: 0, below: 0 };
+    this.speedHist = new Float32Array(120);
+    this.histPos = 0;
+    this.scrubMarks = [];
+    if (this.mode === 'endless') { this.piece = 0; this.distance = 0; }
+    this._respawn(0);
     this.mv.cv.autobhop = this.settings.autobhop;
     this.mv.cv.airaccelerate = this.settings.airaccelerate;
   }
 
-  _spawnAt(stageIndex) {
-    const st = this.stages[stageIndex];
-    this.player.teleport(st.pos);
+  /** Teleport to a checkpoint, standing still. */
+  _respawn(cpIndex) {
+    const c = this.cps[cpIndex];
+    this.player.teleport(c.pos);
     this.prevPos.copy(this.player.pos);
-    this.ev.setView?.(st.yaw, 0);
-    this.demoYaw = st.yaw;
+    this.ev.setView?.(c.yaw, 0);
+    this.demoYaw = c.yaw;
     this.trail = [];
     this._chaseReset = true;
     this.bot = null;
+    this.progress = new SurfBot(this.line, { start: c.idx });
   }
 
+  /** "Back to checkpoint" key. */
   toStageStart() {
     if (this.run.status === 'finished' || this.run.status === 'dead') return;
     if (this.mode === 'endless') { this.restart(); return; }
-    this._spawnAt(this.run.stage);
+    this._breakCombo();
+    this._respawn(this.run.cp);
     this.audio.play('reset');
   }
 
@@ -184,7 +202,9 @@ export class Game {
     this.prevPos.copy(p.pos);
     const wasGround = p.onGround;
     const vy = p.vel.y;
+    const before = p.vel.len();
     const jumped = this.mv.tick(p, cmd, TICK);
+    const after = p.vel.len();
     if (jumped && !this.demo) this.audio.play('jump');
     if (!wasGround && p.onGround && vy < -350 && !this.demo) this.audio.play('land');
 
@@ -199,8 +219,10 @@ export class Game {
       const inStart = this.startTrig.touches(p.pos, HULL);
       if (inStart) {
         if (run.status !== 'start') {
-          run.status = 'start'; run.ticks = 0; run.stage = 0; run.splits = []; this.rec = [];
+          run.status = 'start'; run.ticks = 0; run.cp = 0; run.splits = []; this.rec = [];
+          run.bestCombo = 0; run.topSpeed = 0;
           this.syncGood = this.syncTotal = 0;
+          this.combo = { mult: 1, time: 0, points: 0, below: 0 };
         }
         const hs = Math.hypot(p.vel.x, p.vel.z);
         if (hs > START_SPEED_CAP) { p.vel.x *= START_SPEED_CAP / hs; p.vel.z *= START_SPEED_CAP / hs; }
@@ -212,92 +234,131 @@ export class Game {
       }
     }
 
+    const hs = Math.hypot(p.vel.x, p.vel.z);
     if (run.status === 'running') {
       run.ticks++;
+      run.topSpeed = Math.max(run.topSpeed, hs);
       if (run.ticks % GHOST_STEP === 0) this.rec.push(p.pos.x, p.pos.y, p.pos.z, cmd.yaw);
+      // scrub: a mistake (slamming a ramp, clipping an edge, hitting a wall)
+      // that throws away a chunk of speed in one tick
+      const loss = before - after;
+      if (before > 600 && loss > Math.max(140, before * 0.07) && !this.demo) {
+        this.scrubMarks.push(this.histPos);
+        this._breakCombo();
+        this.ev.onScrub?.(Math.round(loss));
+      }
+      this._updateCombo(hs);
+    }
+    if (run.ticks % 5 === 0) {
+      this.speedHist[this.histPos % this.speedHist.length] = hs;
+      this.histPos++;
     }
 
-    if (this.mode === 'map') this._mapTriggers(p);
-    else this._endlessProgress(p);
+    const idx = this.progress._locate(p.pos);
+    if (this.mode === 'map') this._mapProgress(p, idx);
+    else this._endlessProgress(p, idx);
   }
 
-  _mapTriggers(p) {
+  _updateCombo(hs) {
+    const c = this.combo;
+    if (hs >= COMBO_SPEED) {
+      c.time += TICK;
+      c.below = 0;
+      c.mult = Math.min(10, 1 + Math.floor(c.time / 3));
+      c.points += (hs / 100) * c.mult * TICK;
+    } else if (c.points > 0) {
+      c.below += TICK;
+      if (c.below > 0.5) this._breakCombo();
+    }
+  }
+
+  _breakCombo() {
+    const c = this.combo;
+    if (!c) return;
+    if (c.points > 0) {
+      this.run.bestCombo = Math.max(this.run.bestCombo, Math.round(c.points));
+      if (c.points > 50 && !this.demo) this.ev.onComboEnd?.(Math.round(c.points));
+    }
+    this.combo = { mult: 1, time: 0, points: 0, below: 0 };
+  }
+
+  _mapProgress(p, idx) {
     const run = this.run;
-    for (const t of this.triggers) {
-      if (t.stage !== run.stage || !t.touches(p.pos, HULL)) continue;
-      if (t.type === 'teleport') {
-        run.stage = t.target;
+    // reached the next checkpoint? (must have landed on its ramp)
+    const next = this.cps[run.cp + 1];
+    if (next && idx > next.idx && p.surfing) {
+      run.cp++;
+      if (!this.demo && run.status === 'running') {
         const time = run.ticks * TICK;
-        run.splits[t.target - 1] = time;
-        this._spawnAt(run.stage);
-        this.bot = null;
-        if (!this.demo) {
-          this.audio.play('stage');
-          const pbSplits = this.pbEntry()?.splits;
-          const pbt = pbSplits ? pbSplits[t.target - 1] : null;
-          this.ev.onStage?.({ stage: run.stage, time, delta: pbt != null && run.status === 'running' ? time - pbt : null });
-        }
-        return;
-      }
-      if (t.type === 'end') {
-        if (this.demo) { this.restart(); return; }
-        this._finish();
-        return;
+        run.splits[run.cp - 1] = time;
+        this.audio.play('stage');
+        const pbt = this.pbEntry()?.splits?.[run.cp - 1];
+        this.ev.onCheckpoint?.({ cp: run.cp, count: this.cps.length, time, delta: pbt != null ? time - pbt : null, hint: next.hint });
       }
     }
-    if (p.pos.y < this.stages[run.stage].resetY) {
+    if (this.endTrig && this.endTrig.touches(p.pos, HULL)) {
+      if (this.demo) { this.restart(); return; }
+      this._finish();
+      return;
+    }
+    const lp = this.line[idx];
+    if (this.env.floorY != null) this.r.setFloorY(lp.p[1] - lp.height + this.env.floorY);
+    if (p.pos.y < lp.p[1] - lp.height - 1500 || p.pos.y < this.mapMinY - 2000) {
       run.resets++;
-      this._spawnAt(run.stage);
-      this.bot = null;
-      if (!this.demo) { this.audio.play('reset'); this.ev.onReset?.(); }
+      this._breakCombo();
+      this._respawn(run.cp);
+      if (!this.demo) { this.audio.play('reset'); this.ev.onReset?.(this.cps[run.cp]); }
     }
   }
 
   _finish() {
     const run = this.run;
-    if (run.status !== 'running') { // touched the end without a timed run (shouldn't happen)
-      this.restart();
-      return;
-    }
+    if (run.status !== 'running') { this.restart(); return; }
+    this._breakCombo();
     run.status = 'finished';
     const time = run.ticks * TICK;
     const prevPb = this.pbEntry();
-    const res = store.submitTime(this.map.id, time, run.splits.slice());
+    const res = store.submitTime(this.map.id, time, run.splits.slice(), { combo: run.bestCombo, topSpeed: Math.round(run.topSpeed) });
     this._pb = undefined;
     if (res.pb) store.saveGhost(this.map.id, new Float32Array(this.rec));
     if (res.pb && this.settings.ghost) this.ghostFrames = new Float32Array(this.rec);
     this.audio.play(res.pb ? 'record' : 'finish');
-    this.ev.onFinish?.({ time, ...res, splits: run.splits.slice(), pbSplits: prevPb?.splits || null, sync: this.syncPct() });
+    this.ev.onFinish?.({
+      time, ...res, splits: run.splits.slice(), pbSplits: prevPb?.splits || null, sync: this.syncPct(),
+      combo: run.bestCombo, topSpeed: Math.round(run.topSpeed), resets: run.resets,
+    });
   }
 
-  _endlessProgress(p) {
+  _endlessProgress(p, idx) {
     const run = this.run;
-    const idx = this.progress._locate(p.pos);
     const tr = this.track;
     while (this.piece + 1 < tr.pieces.length && idx >= tr.pieces[this.piece + 1].lineFrom + 1) this.piece++;
-    // stream pieces
+    // stream pieces in ahead and out behind
     while (tr.count - this.piece < 6) this._addPiece(tr.next());
     for (const k of [...this.pieceGroups.keys()]) if (k < this.piece - 2) this._removePiece(k);
-    // distance travelled along the guide line (1 unit = 1.905 cm)
     const lp = tr.line[idx];
     this.distance = Math.max(this.distance, idx);
     this.r.setFloorY(lp.p[1] - 12000);
-    if (p.pos.y < lp.p[1] - (lp.width * 1.6) - 1800) {
+    if (p.pos.y < lp.p[1] - lp.height - 1800) {
       if (this.demo) { this.loadEndless(this.seed, { demo: true }); return; }
+      this._breakCombo();
       run.status = 'dead';
       const best = store.getEndlessBest();
       const score = this.piece;
       const record = score > best.score;
-      if (record) store.setEndlessBest({ score, seed: this.seed, time: run.ticks * TICK, date: Date.now() });
+      if (record) store.setEndlessBest({ score, seed: this.seed, time: run.ticks * TICK, date: Date.now(), combo: run.bestCombo });
       this.endlessBest = Math.max(best.score, score);
       this.audio.play(record ? 'record' : 'over');
-      this.ev.onEndlessOver?.({ score, best: Math.max(best.score, score), record, seed: this.seed, time: run.ticks * TICK, prevBest: best });
+      this.ev.onEndlessOver?.({
+        score, best: Math.max(best.score, score), record, seed: this.seed, time: run.ticks * TICK, prevBest: best,
+        combo: run.bestCombo, topSpeed: Math.round(run.topSpeed),
+      });
     }
   }
 
   _newBot() {
-    const line = this.mode === 'endless' ? this.track.line : this.stages[this.run.stage].line;
-    this.bot = new SurfBot(line, { offset: 0.45 });
+    const c = this.cps[this.run.cp];
+    this.bot = new SurfBot(this.line, { offset: 0.45, start: c.idx, walk: !!c.start, forks: this.map.forks || [] });
   }
 
   /** Personal-best entry for the current map (cached). */
@@ -350,6 +411,7 @@ export class Game {
       this.ghostMesh.rotation.y = this.demoYaw;
       this.ghostMesh.userData.trail.visible = false;
       this.r.speed = Math.hypot(p.vel.x, p.vel.z);
+      this.r.vel.set(p.vel.x, p.vel.y, p.vel.z);
       return;
     }
     cam.rotation.set(view.pitch, view.yaw, 0);
@@ -359,6 +421,7 @@ export class Game {
     this.fov += (target - this.fov) * Math.min(1, dt * 4);
     if (Math.abs(cam.fov - this.fov) > 0.01) { cam.fov = this.fov; cam.updateProjectionMatrix(); }
     this.r.speed = speed;
+    this.r.vel.set(p.vel.x, p.vel.y, p.vel.z);
     this._ghostFrame(alpha);
   }
 
@@ -410,9 +473,13 @@ export class Game {
       speed: Math.hypot(p.vel.x, p.vel.z),
       time: run.ticks * TICK,
       status: run.status,
-      stage: run.stage,
-      stages: this.stages.length,
+      cp: run.cp,
+      cps: this.cps.length,
       sync: this.syncPct(),
+      combo: this.combo,
+      hist: this.speedHist,
+      histPos: this.histPos,
+      scrubs: this.scrubMarks,
       surfing: p.surfing,
       piece: this.piece,
       seed: this.seed,

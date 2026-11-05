@@ -7,6 +7,9 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 
 export const SUN_DIR = new THREE.Vector3(0, 0.07, -1).normalize();
 export const FOG_COLOR = new THREE.Color(0.32, 0.05, 0.3);
+export const FOG_NEAR = { value: 9000 };
+export const FOG_FAR = { value: 60000 };
+const DEFAULT_ENV = { sky: true, mountains: true, fogColor: [0.32, 0.05, 0.3], fogNear: 9000, fogFar: 60000, gridColor: null };
 
 const QUALITY = {
   low: { ratio: 0.85, bloom: false, bloomScale: 0, particles: 300 },
@@ -39,6 +42,7 @@ export class Renderer {
     this._buildPost();
 
     this.world = null;
+    this.vel = new THREE.Vector3();
     window.addEventListener('resize', () => this.resize());
   }
 
@@ -47,6 +51,7 @@ export class Renderer {
     this.renderScale = renderScale;
     const Q = QUALITY[this.quality];
     this.particles.visible = particlesOn;
+    this.streaks.visible = particlesOn;
     this.particles.geometry.setDrawRange(0, Q.particles);
     this.resize();
   }
@@ -83,6 +88,24 @@ export class Renderer {
     if (group) this.scene.add(group);
   }
 
+  /** Per-map look: open sky, or an enclosed space with close fog. */
+  setEnv(env = {}) {
+    const e = { ...DEFAULT_ENV, ...env };
+    FOG_COLOR.setRGB(...e.fogColor);
+    FOG_NEAR.value = e.fogNear;
+    FOG_FAR.value = e.fogFar;
+    this.scene.fog.color.copy(FOG_COLOR);
+    this.scene.fog.near = e.fogNear;
+    this.scene.fog.far = e.fogFar;
+    this.sky.visible = e.sky;
+    this.mountains.visible = e.mountains;
+    this.scene.background = e.sky ? null : FOG_COLOR.clone();
+    const fu = this.floor.material.uniforms;
+    fu.uGridColor.value.set(...(e.gridColor || [0, 0, 0]));
+    fu.uGridFixed.value = e.gridColor ? 1 : 0;
+    fu.uFadeFar.value = e.sky ? 140000 : e.fogFar * 1.2;
+  }
+
   setFloorY(y) { this.floor.position.y = y; this.mountains.position.y = y; }
 
   _buildPost() {
@@ -109,7 +132,10 @@ export class Renderer {
 
     // --- neon grid floor ---
     const floorMat = new THREE.ShaderMaterial({
-      uniforms: { uTime: { value: 0 }, uFog: { value: FOG_COLOR }, uCam: { value: new THREE.Vector3() } },
+      uniforms: {
+        uTime: { value: 0 }, uFog: { value: FOG_COLOR }, uCam: { value: new THREE.Vector3() },
+        uGridColor: { value: new THREE.Color() }, uGridFixed: { value: 0 }, uFadeFar: { value: 140000 },
+      },
       vertexShader: FLOOR_VS, fragmentShader: FLOOR_FS, fog: false,
       transparent: false,
     });
@@ -145,6 +171,31 @@ export class Renderer {
     this.particles = new THREE.Points(pg, pm);
     this.particles.frustumCulled = false;
     this.scene.add(this.particles);
+
+    // --- speed streaks: lines stretched along your velocity ---
+    const S = 700;
+    const sp = new Float32Array(S * 2 * 3), se = new Float32Array(S * 2), sc = new Float32Array(S * 2 * 3);
+    for (let i = 0; i < S; i++) {
+      const x = Math.random(), y = Math.random(), z = Math.random();
+      const c = palette[i % palette.length];
+      for (let k = 0; k < 2; k++) {
+        const j = i * 2 + k;
+        sp[j * 3] = x; sp[j * 3 + 1] = y; sp[j * 3 + 2] = z;
+        se[j] = k;
+        sc[j * 3] = c[0]; sc[j * 3 + 1] = c[1]; sc[j * 3 + 2] = c[2];
+      }
+    }
+    const sg = new THREE.BufferGeometry();
+    sg.setAttribute('position', new THREE.BufferAttribute(sp, 3));
+    sg.setAttribute('aEnd', new THREE.BufferAttribute(se, 1));
+    sg.setAttribute('color', new THREE.BufferAttribute(sc, 3));
+    this.streaks = new THREE.LineSegments(sg, new THREE.ShaderMaterial({
+      uniforms: { uCam: { value: new THREE.Vector3() }, uVel: { value: new THREE.Vector3() }, uBox: { value: 3600 }, uAmt: { value: 0 } },
+      vertexShader: STREAK_VS, fragmentShader: STREAK_FS,
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+    }));
+    this.streaks.frustumCulled = false;
+    this.scene.add(this.streaks);
   }
 
   render(dt) {
@@ -160,6 +211,10 @@ export class Renderer {
     pu.uCam.value.copy(cam.position);
     pu.uPx.value = this.pixelRatio * (window.innerHeight / 900);
     pu.uSpeed.value = this.speed;
+    const su = this.streaks.material.uniforms;
+    su.uCam.value.copy(cam.position);
+    su.uVel.value.copy(this.vel);
+    su.uAmt.value = Math.min(1, Math.max(0, (this.speed - 900) / 1800));
     this.finalPass.uniforms.uSpeed.value = Math.min(1, Math.max(0, (this.speed - 900) / 2200));
     this.finalPass.uniforms.uTime.value = this.time;
     if (this.world && this.world.userData.update) this.world.userData.update(this.time, cam);
@@ -294,6 +349,9 @@ const FLOOR_FS = /* glsl */`
 uniform float uTime;
 uniform vec3 uFog;
 uniform vec3 uCam;
+uniform vec3 uGridColor;
+uniform float uGridFixed;
+uniform float uFadeFar;
 varying vec3 vWorld;
 float gridLine(vec2 p, float w) {
   vec2 g = abs(fract(p - 0.5) - 0.5) / fwidth(p);
@@ -304,12 +362,13 @@ void main() {
   float l = gridLine(p, 1.2);
   float big = gridLine(vWorld.xz / 12000.0, 1.6);
   float dist = length(vWorld.xz - uCam.xz);
-  float fade = 1.0 - smoothstep(20000.0, 140000.0, dist);
+  float fade = 1.0 - smoothstep(uFadeFar * 0.15, uFadeFar, dist);
   vec3 base = vec3(0.02, 0.0, 0.05);
   vec3 lc = mix(vec3(1.0, 0.15, 0.8), vec3(0.0, 0.9, 1.0), 0.5 + 0.5 * sin(vWorld.x * 0.00002 + uTime * 0.2));
+  lc = mix(lc, uGridColor, uGridFixed);
   vec3 col = base + lc * (l * 0.55 + big * 1.1) * fade;
   // horizon haze
-  col = mix(col, uFog * 1.2, smoothstep(30000.0, 200000.0, dist));
+  col = mix(col, uFog * 1.2, smoothstep(uFadeFar * 0.2, uFadeFar * 1.4, dist));
   gl_FragColor = vec4(col, 1.0);
 }`;
 
@@ -339,6 +398,33 @@ void main() {
   vec2 c = gl_PointCoord - 0.5;
   float a = smoothstep(0.5, 0.0, length(c));
   gl_FragColor = vec4(vColor * a * vFade * 1.4, a * vFade);
+}`;
+
+const STREAK_VS = /* glsl */`
+uniform vec3 uCam;
+uniform vec3 uVel;
+uniform float uBox;
+attribute float aEnd;
+attribute vec3 color;
+varying vec3 vColor;
+varying float vA;
+void main() {
+  vec3 p = position * uBox;
+  p = mod(p - uCam, uBox) - uBox * 0.5 + uCam;
+  // stretch each streak backwards along the velocity (0.05 s worth)
+  p -= uVel * 0.05 * aEnd;
+  float d = length(p - uCam);
+  vA = (1.0 - smoothstep(uBox * 0.25, uBox * 0.5, d)) * smoothstep(150.0, 500.0, d) * (1.0 - aEnd * 0.9);
+  vColor = color;
+  gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
+}`;
+
+const STREAK_FS = /* glsl */`
+uniform float uAmt;
+varying vec3 vColor;
+varying float vA;
+void main() {
+  gl_FragColor = vec4(vColor * vA * uAmt * 1.6, vA * uAmt);
 }`;
 
 const FinalShader = {

@@ -21,12 +21,14 @@ let currentSeed = null;
 const game = new Game(renderer, audio, settings, {
   setView(yaw, pitch) { input.yaw = yaw; input.pitch = pitch; },
   onStart() { ui.message('GO!', 0.8); },
-  onStage(info) {
-    ui.message(`STAGE ${info.stage + 1}`, 1.2);
-    ui.split(info.delta, `Stage ${info.stage + 1}`);
-    showStageHint();
+  onCheckpoint(info) {
+    ui.message(`CHECKPOINT ${info.cp}`, 1.0);
+    ui.split(info.delta, `CP ${info.cp}`);
+    if (info.hint) ui.hint(info.hint, 12);
   },
-  onReset() { showStageHint(true); },
+  onReset(cp) { if (cp?.hint) ui.hint(cp.hint, 7); },
+  onScrub(loss) { ui.scrub(loss); audio.play('scrub'); },
+  onComboEnd(points) { if (points > 300) ui.split(null, `COMBO ${points.toLocaleString()}`); },
   onFinish(r) {
     state = 'finished';
     input.unlock();
@@ -58,14 +60,16 @@ function applySettings(s) {
 
 function showStageHint(short = false) {
   if (!currentMap || game.mode !== 'map') return;
-  const st = currentMap.stages[game.run.stage];
-  if (st?.hint) ui.hint(st.hint, short ? 7 : 14);
+  const c = currentMap.checkpoints[game.run.cp];
+  if (c?.hint) ui.hint(c.hint, short ? 7 : 14);
 }
 
 // ---------------------------------------------------------------------------
 
+const DEMO_MAPS = ['neon-drift', 'night-tunnel', 'canyon-run'];
+let demoIndex = Math.floor(Math.random() * DEMO_MAPS.length);
 function startDemo() {
-  const demoMap = getMap('neon-drift');
+  const demoMap = getMap(DEMO_MAPS[demoIndex++ % DEMO_MAPS.length]);
   game.loadMap(demoMap, { demo: true });
   currentMap = null;
   ui.showHud(false);

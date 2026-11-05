@@ -15,6 +15,7 @@ export const DEFAULT_SETTINGS = {
   autobhop: true,
   showKeys: true,
   hints: true,
+  speedGraph: true,
   airaccelerate: 150,
   volume: 0.8,
   music: 0.55,
@@ -45,10 +46,10 @@ export function saveSettings(s) { write('settings', s); }
 export function getBoard(mapId) { return read('lb.' + mapId, []); }
 
 /** Insert a time; returns { rank (1-based or 0 if not top 10), pb: boolean } */
-export function submitTime(mapId, time, splits) {
+export function submitTime(mapId, time, splits, extra = {}) {
   const board = getBoard(mapId);
   const prevBest = board[0]?.time ?? Infinity;
-  const entry = { time, date: Date.now(), splits };
+  const entry = { time, date: Date.now(), splits, ...extra };
   board.push(entry);
   board.sort((a, b) => a.time - b.time);
   const top = board.slice(0, 10);

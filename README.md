@@ -25,7 +25,7 @@ Then open http://localhost:8080.
 | Move / strafe | `W` `A` `S` `D` |
 | Jump (hold to bunny-hop) | `Space` |
 | Restart run | `R` |
-| Back to stage start | `T` |
+| Back to last checkpoint | `T` |
 | Toggle PB ghost | `G` |
 | Pause / menu | `Esc` |
 
@@ -39,6 +39,10 @@ All keys can be rebound in **Settings**. Jump can also go on the mouse wheel.
 4. **Follow the ramp with your mouse**, especially on curves.
 5. **Air strafe:** in the air, hold `A` and move the mouse left (or `D` and right).
    Matching the key to the mouse direction is your *sync* %.
+6. **Keep your momentum.** Every map starts with a big curved drop-in to build
+   speed, then flows as one continuous line. Stay above 1200 u/s to grow a
+   **speed combo** (x1 to x10). Slamming into a ramp or clipping an edge
+   **scrubs** speed and breaks the combo.
 
 Start with **First Wave**, the tutorial map. It shows hints at each stage.
 
@@ -51,17 +55,32 @@ Start with **First Wave**, the tutorial map. It shows hints at each stage.
 - **Exact collision:** ramps are convex brushes. Box traces use the brush's
   Minkowski sum with the player box (face, axis and edge-bevel planes), so you
   don't snag on seams between ramp segments.
-- **Three maps:** *First Wave* (tutorial), *Neon Drift* (easy), *Overclock* (hard),
-  each split into stages with teleport gates.
-- **Endless mode:** a seeded procedural course that streams in as you go and
-  gets harder (thinner ramps, longer gaps, side shifts). It controls speed with
-  climbs, and has random and daily seeds.
+- **Six continuous momentum maps.** None of them teleport you, so you never
+  lose speed between sections. Each starts with a big curved drop-in. Fall
+  and you respawn standing still at the last checkpoint (the spinning diamond).
+
+  | Map | Difficulty | Space |
+  | --- | --- | --- |
+  | First Wave | tutorial | open sky, with hints |
+  | Neon Drift | easy | open sky, 1 fast line |
+  | Night Tunnel | medium | fully enclosed ribbed tunnel |
+  | Canyon Run | medium | tall canyon walls, red sky, 1 fast line |
+  | Overclock | hard | open sky, thin ramps, 2 fast lines |
+  | Data Core | hard | tight enclosed shaft |
+- **Fast lines:** at some gaps, a long jump straight ahead lands directly on a
+  later ramp, but only if you're carrying enough speed. Slower riders take a
+  safe detour to the side.
+- **Endless mode:** a seeded procedural course that starts with a curved
+  drop-in, streams in as you go and gets harder (thinner ramps, longer gaps,
+  side shifts). It controls speed with climbs, scores ramps cleared and your
+  best combo, and has random and daily seeds.
 - **Ghosts and records:** your personal-best run replays as a ghost. The top-10
   local leaderboard per map shows stage splits compared to your PB.
-- **HUD:** speed, timer, stage, strafe sync %, split deltas, key display.
+- **HUD:** speed, timer, checkpoint, strafe sync %, split deltas, speed combo,
+  scrub warnings, a 6-second speed graph (scrubs marked in red), key display.
 - **Visuals:** striped synthwave sun, wireframe mountains, glowing grid floor,
-  neon-edged glass ramps, bloom, speed particles, and a slight FOV widening at
-  speed. **Auto quality** lowers the settings on slow machines unless you pick
+  neon-edged glass ramps, glowing tunnel ribs, per-map fog and lighting, bloom,
+  speed particles and streaks, and a slight FOV widening at speed. **Auto quality** lowers the settings on slow machines unless you pick
   a quality yourself.
 - **Audio:** everything is synthesized with WebAudio: wind that rises with
   speed, ramp hiss, game sounds, and a procedural synthwave soundtrack.
@@ -99,25 +118,42 @@ npm test
 ```
 
 The tests cover the physics (landing, friction, surfing, seams, air-strafing).
-A surf bot also plays every stage of every map, plus 20+ pieces of several
-endless seeds, using the real physics. A map change that makes a stage
-impossible fails the tests.
+A surf bot also uses the real physics to play:
+- every map from start to finish, checking that speed stays under 3400 u/s
+- each checkpoint section from a standing respawn
+- every fork's fast line
+- 20+ pieces of several endless seeds
+
+A map change that makes any of these impossible fails the tests.
 
 ### Making a map
 
 Maps are built in code with the `Course` helper:
 
 ```js
-addStage(b, {
-  origin: [0, 0, 0], heading: 0,
-  ramp: { width: 260, height: 380, color: COLORS.cyan },
-  build: (c) => c.straight(4000, 900).curve(60, 5000, 950).gap(700).straight(3000, 700),
+const tunnel = { side: 420, top: 750, ceiling: true, color: COLORS.purple };
+addCourse(b, {
+  ramp: { width: 260, height: 380, color: COLORS.cyan, minSpeed: 1100 },
+  build: (c) => c
+    .curve(100, 3800, 2300).straight(2500, 300)      // drop-in
+    .gap(800, 0, { tunnel }).straight(3500, 380)    // into a tunnel
+    .gap(900).checkpoint('optional hint')
+    .straight(3500, 1000)                            // rebuild speed after respawn
+    .fork({ length: 4400, speed: 2000, shift: -600 }) // fast line vs detour
+    .straight(3000, 300),
 });
 ```
 
-`straight(length, drop)`, `curve(angleDeg, radius, drop)`, `wave(length, drop, amplitude)`
-and `gap(length, sideShift)` chain together. Gap drops are computed
-automatically so a slow player still clears the next ramp.
+`straight(length, drop)`, `curve(angleDeg, radius, drop)`, `wave(length, drop, amplitude)`,
+`gap(length, sideShift, opts)`, `checkpoint(hint)` and `fork({...})` chain together.
+Gap drops are computed automatically so a slow player still clears the next ramp.
+
+Rules of thumb the bot tests taught us:
+- Keep riders on the **outside** of turns. To turn the other way, switch faces
+  across a gap with a small offset: `gap(900, -240, { face: 'right' })`.
+- Land on a short straight before a curve.
+- Add a gentle run-out after steep ramps.
+- Widen turns for fast sections. A radius of about v²/650 is comfortable.
 
 ## Ideas for later
 

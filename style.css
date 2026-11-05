@@ -184,3 +184,15 @@ kbd { font-family: var(--font-display); font-size: 12px; padding: 2px 6px; borde
   #hud-speed { font-size: 36px; }
   #hud-hint { top: 96px; font-size: 16px; }
 }
+
+/* ---------- combo / scrub / graph ---------- */
+#hud-combo { position: absolute; left: 30px; top: 50%; transform: translateY(-50%); text-align: left; }
+#hud-combo .mult { font-size: 40px; font-weight: 900; color: var(--yellow); text-shadow: 0 0 14px rgba(255, 225, 77, 0.8); line-height: 1; }
+#hud-combo .pts { font-size: 20px; font-weight: 700; color: #fff; margin-top: 2px; font-variant-numeric: tabular-nums; }
+#hud-combo .lbl { font-size: 10px; letter-spacing: 0.3em; color: var(--muted); margin-top: 2px; }
+#hud-combo .combo-bar { width: 140px; height: 3px; background: rgba(255, 255, 255, 0.12); margin-top: 6px; border-radius: 2px; overflow: hidden; }
+#hud-combo .combo-bar div { height: 100%; width: 0; background: var(--yellow); box-shadow: 0 0 8px var(--yellow); }
+#hud-combo.pop .mult { animation: popin 0.25s ease-out; }
+#hud-combo.fading { opacity: 0.35; transition: opacity 0.3s; }
+#hud-scrub { position: absolute; top: 60%; left: 50%; transform: translateX(-50%); font-size: 22px; font-weight: 900; letter-spacing: 0.2em; color: var(--red); text-shadow: 0 0 12px rgba(255, 68, 102, 0.8); animation: popin 0.25s ease-out; }
+#hud-graph { position: absolute; left: 24px; bottom: 26px; width: 240px; height: 70px; opacity: 0.9; }

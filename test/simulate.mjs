@@ -1,4 +1,4 @@
-// Shared helper: let the bot play one stage of a map using the real physics.
+// Shared helper: let the bot play parts of a map using the real physics.
 import { Brush } from '../src/physics/brush.js';
 import { World, Trigger } from '../src/physics/world.js';
 import { Movement, Player, HULL } from '../src/physics/movement.js';
@@ -10,21 +10,32 @@ export function buildWorld(map) {
   return w;
 }
 
-export function playStage(map, world, stageIndex, botOpts = {}, maxTicks = 100 * 90) {
-  const st = map.stages[stageIndex];
+/**
+ * Play from checkpoint `cp` until the next checkpoint is reached (or the
+ * finish, for the last one). With opts.full, play from the start to the
+ * finish without stopping. opts.skip = [from, to] takes a fork's fast line.
+ */
+export function playSection(map, world, cp, opts = {}) {
+  const c = map.checkpoints[cp];
+  const next = opts.full ? null : map.checkpoints[cp + 1];
   const mv = new Movement(world);
   const p = new Player();
-  p.teleport(st.pos);
-  const bot = new SurfBot(st.line, botOpts);
-  const goal = map.triggers.find((t) => (t.type === 'teleport' || t.type === 'end') && t.stage === stageIndex);
-  const gt = new Trigger(goal.min, goal.max);
-  let maxSpeed = 0;
+  p.teleport(c.pos);
+  const line = map.line;
+  const bot = new SurfBot(line, { offset: opts.offset ?? 0.45, start: c.idx, walk: !!c.start, skip: opts.skip, forks: opts.skip ? [] : map.forks || [] });
+  const end = map.triggers.find((t) => t.type === 'end');
+  const gt = new Trigger(end.min, end.max);
+  let maxSpeed = 0, speedAtFork = null;
+  const maxTicks = opts.maxTicks ?? 100 * (opts.full ? 400 : 120);
   for (let i = 0; i < maxTicks; i++) {
-    const cmd = bot.command(p);
-    mv.tick(p, cmd, 1 / 100);
-    maxSpeed = Math.max(maxSpeed, p.vel.lenH());
-    if (gt.touches(p.pos, HULL)) return { ok: true, ticks: i, maxSpeed, pos: p.pos };
-    if (p.pos.y < st.resetY) return { ok: false, reason: 'fell', ticks: i, idx: bot.idx, of: st.line.length, pos: p.pos, maxSpeed };
+    mv.tick(p, bot.command(p), 1 / 100);
+    const sp = p.vel.lenH();
+    maxSpeed = Math.max(maxSpeed, sp);
+    if (opts.skip && speedAtFork == null && bot.idx >= opts.skip[0]) speedAtFork = sp;
+    if (next && bot.idx >= next.idx + 1 && p.surfing) return { ok: true, ticks: i, maxSpeed, endSpeed: sp, speedAtFork };
+    if (gt.touches(p.pos, HULL)) return { ok: true, ticks: i, maxSpeed, endSpeed: sp, speedAtFork, finished: true };
+    const lp = line[bot.idx];
+    if (p.pos.y < lp.p[1] - lp.height - 1500) return { ok: false, reason: 'fell', ticks: i, idx: bot.idx, of: line.length, pos: p.pos, maxSpeed, speedAtFork };
   }
-  return { ok: false, reason: 'timeout', idx: bot.idx, of: st.line.length, pos: p.pos, maxSpeed };
+  return { ok: false, reason: 'timeout', idx: bot.idx, of: line.length, pos: p.pos, maxSpeed };
 }
