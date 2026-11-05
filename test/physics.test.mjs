@@ -111,3 +111,13 @@ test('air strafing gains speed (bhop style turning)', () => {
   }
   assert.ok(p.vel.lenH() > 400, `bhop speed ${p.vel.lenH().toFixed(0)}`);
 });
+
+test('trigger keeps vector bounds when constructed with map data', async () => {
+  const { Trigger } = await import('../src/physics/world.js');
+  const { HULL } = await import('../src/physics/movement.js');
+  const data = { type: 'start', min: [-10, -10, -10], max: [10, 10, 10] };
+  const t = new Trigger(data.min, data.max, data);
+  assert.equal(t.type, 'start');
+  assert.ok(t.touches(new V3(0, 0, 0), HULL));
+  assert.ok(!t.touches(new V3(100, 0, 0), HULL));
+});

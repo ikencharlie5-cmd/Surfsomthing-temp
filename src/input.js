@@ -53,7 +53,6 @@ export class Input {
       if (!this.locked) return;
       // scroll-wheel jump (classic bhop bind) when jump is bound to the wheel
       if (this.settings.keys.jump === 'Wheel') { this.wheelJump = 3; }
-      e.preventDefault?.();
     }, { passive: true });
   }
 

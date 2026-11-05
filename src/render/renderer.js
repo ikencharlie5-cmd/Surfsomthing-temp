@@ -3,7 +3,6 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 
 export const SUN_DIR = new THREE.Vector3(0, 0.07, -1).normalize();
@@ -20,9 +19,10 @@ export class Renderer {
   constructor(canvas) {
     this.canvas = canvas;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance', stencil: false });
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
-    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    // The neon palette is authored as display values: no tone mapping or
+    // sRGB encode, so the bloom and no-bloom paths look identical.
+    this.renderer.toneMapping = THREE.NoToneMapping;
+    this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
 
     this.scene = new THREE.Scene();
     this.scene.fog = new THREE.Fog(FOG_COLOR, 9000, 60000);
@@ -89,9 +89,8 @@ export class Renderer {
     this.lineResolution = new THREE.Vector2(1, 1);
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.85, 0.55, 0.72);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.6, 0.15, 1.05);
     this.composer.addPass(this.bloom);
-    this.composer.addPass(new OutputPass());
     this.finalPass = new ShaderPass(FinalShader);
     this.composer.addPass(this.finalPass);
   }
@@ -263,10 +262,10 @@ void main() {
       stripes = step(k * 0.55, band);
     }
     float edge = smoothstep(R, R - 0.004, ang);
-    col = mix(col, sc * 2.6, edge * stripes);
+    col = mix(col, sc * 1.0, edge * stripes);
   }
   // glow halo
-  col += vec3(1.0, 0.3, 0.55) * pow(max(dot(d, uSun), 0.0), 60.0) * 0.6;
+  col += vec3(1.0, 0.3, 0.55) * pow(max(dot(d, uSun), 0.0), 60.0) * 0.35;
 
   // stars
   if (h > 0.03) {
@@ -308,7 +307,7 @@ void main() {
   float fade = 1.0 - smoothstep(20000.0, 140000.0, dist);
   vec3 base = vec3(0.02, 0.0, 0.05);
   vec3 lc = mix(vec3(1.0, 0.15, 0.8), vec3(0.0, 0.9, 1.0), 0.5 + 0.5 * sin(vWorld.x * 0.00002 + uTime * 0.2));
-  vec3 col = base + lc * (l * 1.4 + big * 2.2) * fade;
+  vec3 col = base + lc * (l * 0.55 + big * 1.1) * fade;
   // horizon haze
   col = mix(col, uFog * 1.2, smoothstep(30000.0, 200000.0, dist));
   gl_FragColor = vec4(col, 1.0);

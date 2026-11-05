@@ -206,12 +206,12 @@ void main() {
   vec3 c;
   if (vKind < 0.5) {
     // surfable slope: deep tint with a soft gradient + grid + energy pulse
-    vec3 base = mix(vColor * 0.05, vColor * 0.22, hemi);
-    base *= 0.55 + 0.75 * ndl;
-    float pulse = smoothstep(0.92, 1.0, sin(vWorld.y * 0.012 + uTime * 3.0)) * 0.35;
-    c = base + vColor * (g * 0.18 * gf + g2 * 0.28 + pulse * 0.25) + vColor * fres * 0.45;
+    vec3 base = mix(vColor * 0.03, vColor * 0.13, hemi);
+    base *= 0.45 + 0.8 * ndl;
+    float pulse = smoothstep(0.94, 1.0, sin(vWorld.y * 0.012 + uTime * 3.0));
+    c = base + vColor * (g * 0.16 * gf + g2 * 0.3 + pulse * 0.14) + vColor * fres * 0.05;
     // sunset reflection
-    c += vec3(1.0, 0.4, 0.3) * pow(max(dot(reflect(-V, N), uSun), 0.0), 24.0) * 0.6;
+    c += vec3(1.0, 0.35, 0.3) * pow(max(dot(reflect(-V, N), uSun), 0.0), 32.0) * 0.35;
   } else if (vKind < 1.5) {
     // platforms: dark glass with bright grid
     vec3 base = vec3(0.02, 0.015, 0.06) + vColor * 0.04;

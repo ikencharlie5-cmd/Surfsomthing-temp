@@ -106,9 +106,9 @@ function clipBoxToBrush(sx, sy, sz, ex, ey, ez, hx, hy, hz, br, tr) {
 /** Axis-aligned trigger volume. */
 export class Trigger {
   constructor(min, max, data = {}) {
+    Object.assign(this, data);
     this.min = V3.from(min);
     this.max = V3.from(max);
-    Object.assign(this, data);
   }
   touches(pos, ext) {
     return pos.x + ext.x > this.min.x && pos.x - ext.x < this.max.x &&
