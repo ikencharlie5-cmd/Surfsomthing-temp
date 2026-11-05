@@ -13,8 +13,8 @@ export const TIER = {
   easy: { width: 300, minSpeed: 1050, sections: 10, needles: 1, needleSize: 260, jumps: 0, jumpLen: 0, forks: 0, shiftMax: 220, switchP: 0.2, rMin: 7500 },
   medium: { width: 265, minSpeed: 1100, sections: 12, needles: 2, needleSize: 220, jumps: 1, jumpLen: 2000, forks: 1, shiftMax: 320, switchP: 0.3, rMin: 6800 },
   hard: { width: 235, minSpeed: 1150, sections: 13, needles: 3, needleSize: 180, jumps: 1, jumpLen: 2400, forks: 1, shiftMax: 400, switchP: 0.35, rMin: 6200 },
-  expert: { width: 210, minSpeed: 1200, sections: 15, needles: 4, needleSize: 150, jumps: 2, jumpLen: 2800, forks: 2, shiftMax: 450, switchP: 0.4, rMin: 5800 },
-  insane: { width: 190, minSpeed: 1250, sections: 17, needles: 5, needleSize: 125, jumps: 3, jumpLen: 3200, forks: 2, shiftMax: 500, switchP: 0.45, rMin: 5500 },
+  expert: { width: 210, minSpeed: 1200, sections: 15, needles: 4, needleSize: 160, jumps: 2, jumpLen: 2800, forks: 2, shiftMax: 450, switchP: 0.4, rMin: 5800 },
+  insane: { width: 190, minSpeed: 1250, sections: 17, needles: 5, needleSize: 140, jumps: 3, jumpLen: 3200, forks: 2, shiftMax: 500, switchP: 0.45, rMin: 5500 },
 };
 
 function rand(seed) {
@@ -52,8 +52,13 @@ export function generateCourse(c, o) {
   // drop-in: steep, flattening out
   c.dropIn(lerp(6000, 7500, r()), lerp(2300, 3000, r())).straight(lerp(1500, 2600, r()), lerp(150, 260, r()));
 
+  // the map's twist: what makes it different from the others in its theme
+  const tw = o.twist || {};
+  const tierN = TIERS.indexOf(o.tier);
+  const pattern = (len) => Array.from({ length: len }, (_, k) => ((k + Math.floor(r() * 2)) % 2 ? 'duck' : 'dodge'));
+
   // decide where the challenges go (spread through the run, never the first gap)
-  const n = T.sections;
+  const n = T.sections + (tw.sections || 0);
   const slots = Array.from({ length: n }, () => 'gap');
   const place = (kind, count) => {
     for (let k = 0; k < count; k++) {
@@ -63,9 +68,13 @@ export function generateCourse(c, o) {
       }
     }
   };
-  place('jump', T.jumps);
-  if (o.forks !== false) place('fork', T.forks);
-  place('needle', T.needles);
+  place('structure', tw.structure ? tw.structure.count ?? 1 : 0);
+  place('spiral', tw.spiral || 0);
+  place('dodge', tw.dodge || 0);
+  place('jump', Math.max(0, T.jumps + (tw.jumps || 0)));
+  if (o.forks !== false) place('fork', Math.max(0, T.forks + (tw.forks || 0)));
+  place('needle', Math.max(0, T.needles + (tw.needles || 0)));
+  place('boost', tw.boost || 0);
 
   let drift = 0;
   let inTunnel = !!o.tunnel;
@@ -88,11 +97,39 @@ export function generateCourse(c, o) {
       c.straight(lerp(1500, 2200, r()), lerp(120, 220, r()));
       continue;
     }
-    if (kind === 'needle') {
+    if (kind === 'structure') {
+      const st = tw.structure;
+      c.gap(lerp(900, 1050, r()), 0, ramp);
+      c.straight(lerp(1000, 1400, r()), lerp(80, 140, r()));
+      c.structure(st.kind, pattern(st.blocks ?? Math.min(3, 2 + Math.ceil(tierN / 2))), st.opts || {});
+      c.straight(lerp(1200, 1800, r()), lerp(100, 160, r()));
+      continue;
+    }
+    if (kind === 'dodge') {
+      c.gap(lerp(900, 1050, r()), 0, ramp);
+      c.straight(lerp(900, 1300, r()), lerp(80, 140, r()));
+      c.dodgeRun(pattern(Math.min(3, 2 + (tierN >= 2 ? 1 : 0))), { color: (o.needle && o.needle.color) || [0.9, 0.5, 0.2], edge: 1.5 });
+      continue;
+    }
+    if (kind === 'spiral') {
+      c.gap(lerp(900, 1050, r()), 0, ramp);
+      c.straight(lerp(1400, 1900, r()), lerp(100, 160, r()));
+      const v = speed();
+      const turn = c.opts.face === 'left' ? 1 : -1;
+      const ang = lerp(270, 330, r()) * turn;
+      const R = Math.max(T.rMin * 1.1, (v * v) / 600, 6000);
+      c.curve(ang, R, (Math.abs(ang) * Math.PI / 180) * R * Math.max(0.06, Math.min(0.12, slopeFor())));
+      drift += ang;
+      c.straight(lerp(1500, 2200, r()), lerp(100, 180, r()));
+      continue;
+    }
+    if (kind === 'boost') {
+      c.gap(lerp(950, 1100, r()), 0, { ...ramp, boost: { mult: tw.boostMult ?? 1.15, color: tw.boostColor } });
+    } else if (kind === 'needle') {
       c.gap(lerp(950, 1150, r()), 0, { ...ramp, needle: { size: T.needleSize, ...(o.needle || {}) } });
     } else {
       // turning back the other way needs the other face (stay on the outside)
-      const wantSwitch = Math.abs(drift) > 110 || r() < T.switchP;
+      const wantSwitch = Math.abs(drift) > 110 || r() < (tw.switchP ?? T.switchP);
       if (wantSwitch) {
         const toRight = c.opts.face === 'left';
         c.gap(lerp(900, 1100, r()), (toRight ? -1 : 1) * W * 0.9, { ...ramp, face: toRight ? 'right' : 'left' });
@@ -107,9 +144,18 @@ export function generateCourse(c, o) {
     const turn = c.opts.face === 'left' ? 1 : -1;
     const s = slopeFor();
     const pick = r();
+    const wv = tw.waveP ?? 0;
+    const pl = tw.plungeP ?? 0;
     if (s < 0) {
       const L = lerp(2000, 3200, r());
       c.straight(L, L * s); // climb to bleed speed
+    } else if (pick < wv) {
+      c.straight(lerp(1200, 1600, r()), lerp(100, 160, r()));
+      const L = lerp(5500, 7000, r());
+      c.wave(L, L * s, lerp(170, 280, r()) * (tw.waveAmp ?? 1), tw.waves ?? 1);
+    } else if (pick < wv + pl) {
+      const L = lerp(2200, 3000, r());
+      c.straight(L, L * Math.max(s, 0.3)).straight(lerp(1700, 2400, r()), lerp(60, 140, r()));
     } else if (pick < 0.3) {
       const L = lerp(2800, 4600, r());
       c.straight(L, L * s);

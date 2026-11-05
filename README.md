@@ -61,18 +61,32 @@ Start with **First Wave**, the tutorial map. It shows hints at each stage.
   the run restarts). Harder maps are longer (up to ~120k units, about a
   minute at speed).
 
+  Every map has its own **twist** that matches its name:
+
   | Theme | Easy | Medium | Hard | Expert | Insane |
   | --- | --- | --- | --- | --- | --- |
-  | Beach (wild sunset coast) | First Wave (tutorial) | Vapor Coast | Riptide | Coral Crown | Tsunami |
-  | Canyon (red rock, desert moon) | Dust Devil | Canyon Run | Mesa Mirage | Rattlesnake Pass | Badlands |
-  | Cave (crystals, underground river) | Echo Hollow | Crystal Cave | Glowworm Grotto | The Deep | Abyssal Drop |
-  | City (towers, street traffic) | Neon Drift | Skyline Rush | Rooftop Run | Downtown Blitz | Megacity |
-  | Space Station (low gravity) | Docking Bay | Overclock | Orbital | Zero-G | Event Horizon |
-  | Server Farm (LED racks) | Night Tunnel | Packet Storm | Data Core | Firewall | Kernel Panic |
-  | Jungle (trees, ruins, temple) | Canopy Glide | Lost Temple | Serpent River | Jaguar Ruins | Green Hell |
-  | Volcano (lava, embers) | Ash Fields | Obsidian Slopes | Magma Run | Pyroclast | Caldera |
-  | Warp (light-ring tunnels) | Warp Lane | Hyperdrive | Lightspeed | Final Overdrive | Singularity |
-  | Castle (weave through a fortress) | Gatehouse | Battlements | Moonlit Keep | Dragon Spire | Siege |
+  | Beach | First Wave (tutorial hints) | Vapor Coast (boost rings) | Riptide (side switches) | Coral Crown (sea cave) | Tsunami (giant waves) |
+  | Canyon | Dust Devil (spiral) | Canyon Run (boost rings) | Mesa Mirage (rock gates) | Rattlesnake Pass (slalom) | Badlands (long jumps) |
+  | Cave | Echo Hollow (duck & dodge) | Crystal Cave (crystal chamber) | Glowworm Grotto (grotto) | The Deep (plunges) | Abyssal Drop (abyss jumps) |
+  | City | Neon Drift (wave ramps) | Skyline Rush (boost rings) | Rooftop Run (rooftop jumps) | Downtown Blitz (duck & dodge) | Megacity (megatower atriums) |
+  | Space Station | Docking Bay (hangar) | Overclock (big boosts) | Orbital (orbit spiral) | Zero-G (very low gravity) | Event Horizon (gravity well spiral) |
+  | Server Farm | Night Tunnel (duck & dodge) | Packet Storm (boost rings) | Data Core (core vault) | Firewall (firewall slots) | Kernel Panic (chaos) |
+  | Jungle | Canopy Glide (canopy waves) | **Lost Temple (temple run)** | Serpent River (serpent slalom) | Jaguar Ruins (ruin dodge) | Green Hell (overgrown ruin) |
+  | Volcano | Ash Fields (ash waves) | Obsidian Slopes (spike dodge) | Magma Run (lava tube) | Pyroclast (eruption jumps) | Caldera (plunges) |
+  | Warp | Warp Lane (boost rings) | Hyperdrive (hyper boosts) | Lightspeed (boost jumps) | Final Overdrive (warp gate) | Singularity (death spiral) |
+  | Castle | Gatehouse (gates) | Battlements (merlon dodge) | Moonlit Keep (great hall) | Dragon Spire (spire jumps) | Siege (full siege) |
+
+  Twist mechanics:
+  - **Set pieces:** the course runs straight through a building, such as a
+    temple, great hall, hangar, server vault, megatower atrium, lava tube, sea
+    cave, crystal chamber, glowworm grotto or warp gate. It has solid walls
+    and a ceiling, lit interiors and duck/dodge blocks inside.
+  - **Duck & dodge:** blocks stick out of the ramp face. Magenta blocks cover
+    the top of the face, so ride low under them. Amber blocks cover the
+    bottom, so ride high over them.
+  - **Boost rings:** fly through one for a burst of speed (once per run).
+  - **Spirals**, **giant waves**, **plunges**, **slaloms** and **low gravity**
+    shape the rest.
 
   The newer maps are laid out by a seeded generator (`src/maps/generator.js`)
   that varies the section mix per map. A seed is only used once the surf bot

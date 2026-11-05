@@ -49,6 +49,7 @@ const game = new Game(renderer, audio, settings, {
   onHint(text) { ui.hint(text, 12); },
   onReset() { ui.message('RESTART', 0.8); showStageHint(true); },
   onScrub(loss) { ui.scrub(loss); audio.play('scrub'); },
+  onBoost() { ui.message('BOOST!', 0.6); },
   onComboEnd(points) { if (points > 300) ui.split(null, `COMBO ${points.toLocaleString()}`); },
   onFinish(r) {
     state = 'finished';

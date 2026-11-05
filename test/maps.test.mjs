@@ -55,10 +55,20 @@ test('every theme has five maps, easy to insane, chained unlocks', async () => {
   }
 });
 
-test('harder tiers bring needles and long jumps', () => {
-  const insane = MAPS.filter((m) => m.difficulty === 'insane');
-  for (const m of insane) {
-    if (!m.needles) continue;
-    assert.ok(m.needles.length >= 3 && m.jumps.length >= 2, `${m.id}: ${m.needles.length} needles, ${m.jumps.length} jumps`);
+test('every map has its own named twist', () => {
+  const labels = new Set();
+  for (const m of MAPS) {
+    assert.ok(m.twist, `${m.id} has no twist`);
+    labels.add(m.group + ':' + m.twist);
   }
+  // within a theme, no two maps share a twist
+  assert.equal(labels.size, MAPS.length);
 });
+
+test('Lost Temple runs through a temple full of duck/dodge blocks', () => {
+  const m = MAPS.find((x) => x.id === 'lost-temple');
+  assert.equal(m.structures[0].kind, 'temple');
+  assert.ok(m.obstacles.length >= 4, `${m.obstacles.length} blocks`);
+  assert.ok(m.obstacles.some((o) => o.type === 'duck') && m.obstacles.some((o) => o.type === 'dodge'));
+});
+

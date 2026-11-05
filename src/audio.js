@@ -98,6 +98,7 @@ export class AudioEngine {
       case 'record':
         [392, 523.25, 659.25, 783.99, 1046.5, 1318.5, 1567.98].forEach((f, i) => blip(c, out, t + 0.07 * i, f, 0.35, 'square', 0.07, 3000));
         break;
+      case 'boost': sweep(c, out, t, 300, 1800, 0.35, 'sawtooth', 0.08); whoosh(c, out, t, this.noise, 0.45, 0.3); break;
       case 'scrub': sweep(c, out, t, 900, 200, 0.18, 'square', 0.06); whoosh(c, out, t, this.noise, 0.2, 0.12); break;
       case 'over': sweep(c, out, t, 400, 60, 1.0, 'sawtooth', 0.14); break;
       default: break;

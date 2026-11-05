@@ -3,6 +3,7 @@ import { Brush } from '../src/physics/brush.js';
 import { World, Trigger } from '../src/physics/world.js';
 import { Movement, Player, HULL } from '../src/physics/movement.js';
 import { SurfBot } from '../src/sim/bot.js';
+import { checkBoosts } from '../src/sim/boosts.js';
 
 export function buildWorld(map) {
   const w = new World();
@@ -27,8 +28,10 @@ export function playSection(map, world, cp, opts = {}) {
   const gt = new Trigger(end.min, end.max);
   let maxSpeed = 0, speedAtFork = null;
   const maxTicks = opts.maxTicks ?? 100 * (opts.full ? 400 : 120);
+  const usedBoosts = new Set();
   for (let i = 0; i < maxTicks; i++) {
     mv.tick(p, bot.command(p), 1 / 100);
+    checkBoosts(map.boosts, usedBoosts, p);
     const sp = p.vel.lenH();
     maxSpeed = Math.max(maxSpeed, sp);
     if (opts.skip && speedAtFork == null && bot.idx >= opts.skip[0]) speedAtFork = sp;

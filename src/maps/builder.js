@@ -187,9 +187,12 @@ export class Course {
     this.line = [];
     this.checkpoints = []; // { idx, hint }
     this.forks = []; // { from, to, speed }
-    this.extra = []; // extra brushes (needle walls)
+    this.extra = []; // extra brushes (needle walls, obstacles)
     this.needles = [];
     this.jumps = [];
+    this.obstacles = []; // duck/dodge blocks on the ramp face
+    this.structures = []; // enclosed set pieces the course passes through
+    this.boosts = []; // speed rings
     this.minY = Infinity;
     this.slope = 0.2; // drop per unit length of the last ramp move
   }
@@ -202,7 +205,7 @@ export class Course {
 
   _mark(gap) {
     const o = this.opts;
-    this.line.push({ p: [...this.p], h: this.h, gap, face: o.face, width: o.width, height: o.height, tunnel: o.tunnel ? { ...o.tunnel } : null, color: o.color });
+    this.line.push({ p: [...this.p], h: this.h, gap, face: o.face, width: o.width, height: o.height, tunnel: o.tunnel ? { ...o.tunnel } : null, color: o.color, offset: o.rideOffset ?? null });
     this.minY = Math.min(this.minY, this.p[1] - o.height);
   }
 
@@ -294,7 +297,7 @@ export class Course {
    */
   gap(length, shift = 0, opts = {}) {
     this._flush();
-    const { drop: forced, vmin, needle, ...rampOpts } = opts;
+    const { drop: forced, vmin, needle, boost, ...rampOpts } = opts;
     const drop = forced ?? this.autoDrop(length, shift, this.slope, vmin);
     Object.assign(this.opts, rampOpts);
     const [fx, fz] = fwdOf(this.h);
@@ -304,6 +307,98 @@ export class Course {
     this._mark(true);
     this.path = [[...this.p]];
     if (needle) this._needle(A, [...this.p], needle);
+    if (boost) this._boost(A, [...this.p], boost);
+    return this;
+  }
+
+  /** Speed ring hanging in a gap where the intended line passes. */
+  _boost(A, B, o) {
+    const t = o.at ?? 0.45;
+    const dx = B[0] - A[0], dz = B[2] - A[2];
+    const l = Math.hypot(dx, dz) || 1;
+    const rx = -dz / l, rz = dx / l;
+    const faceSign = this.opts.face === 'right' ? 1 : -1;
+    const lat = faceSign * this.opts.width * 0.45;
+    const y = A[1] + (B[1] - A[1]) * t - this.opts.height * 0.45;
+    this.boosts.push({
+      center: [A[0] + dx * t + rx * lat, y, A[2] + dz * t + rz * lat], radius: o.radius ?? 520, height: o.height ?? 900,
+      mult: o.mult ?? 1.18, heading: Math.atan2(-dx / l, -dz / l) * 180 / Math.PI, color: o.color || [0.3, 1.0, 1.0],
+    });
+  }
+
+  /**
+   * Duck and dodge: a straight run with blocks sticking out of the ramp
+   * face. 'duck' blocks cover the top of the face (ride low); 'dodge' blocks
+   * cover the bottom (ride high). The guide line carries the band to ride
+   * in, so the bot (and a smart rider) lines up early.
+   */
+  dodgeRun(pattern, opts = {}) {
+    const approach = opts.approach ?? 1400, zone = opts.zone ?? 420, spacing = opts.spacing ?? 2000;
+    const L = approach + pattern.length * spacing + 600;
+    const slope = opts.slope ?? 0.14;
+    const [fx, fz] = fwdOf(this.h);
+    const [rx, rz] = rightOf(this.h);
+    const w = this.opts.width, h = this.opts.height;
+    const fs = this.opts.face === 'right' ? 1 : -1;
+    const S = [...this.p];
+    const R = (s) => [S[0] + fx * s, S[1] - slope * s, S[2] + fz * s];
+    const baseVec = [rx * fs * w, -h, rz * fs * w];
+    const len3 = Math.hypot(1, slope);
+    const along = [fx / len3, -slope / len3, fz / len3];
+    let n = [along[1] * baseVec[2] - along[2] * baseVec[1], along[2] * baseVec[0] - along[0] * baseVec[2], along[0] * baseVec[1] - along[1] * baseVec[0]];
+    const nl = Math.hypot(...n) || 1;
+    n = n.map((x) => x / nl);
+    if (n[1] < 0) n = n.map((x) => -x);
+    const T = opts.thick ?? 230;
+    const color = opts.color || [0.9, 0.5, 0.2];
+    const goTo = (s, off) => {
+      this.opts.rideOffset = off;
+      this.p = R(s);
+      this.slope = slope;
+      this._push();
+    };
+    let s = 0;
+    pattern.forEach((type, k) => {
+      const a = approach + k * spacing;
+      const off = type === 'duck' ? 0.72 : 0.28;
+      const [f0, f1] = type === 'duck' ? [0, 0.4] : [0.6, 1.0];
+      if (a - approach * 0.85 > s + 50) goTo(a - approach * 0.85, null);
+      goTo(a, off);
+      goTo(a + zone, off);
+      s = a + zone;
+      const pts = [];
+      for (const ss of [a, a + zone]) for (const f of [f0, f1]) {
+        const r = R(ss);
+        const p = [r[0] + baseVec[0] * f, r[1] + baseVec[1] * f, r[2] + baseVec[2] * f];
+        pts.push(p, [p[0] + n[0] * T, p[1] + n[1] * T, p[2] + n[2] * T]);
+      }
+      // bright block: duck = magenta (go under), dodge = amber (go over)
+      const bc = type === 'duck' ? [1.0, 0.25, 0.75] : [1.0, 0.7, 0.15];
+      this.extra.push({ points: pts, kind: 'floor', color: bc, edge: 2.2, obstacle: type });
+      const mid = R(a + zone / 2);
+      const fm = (f0 + f1) / 2;
+      this.obstacles.push({ type, center: [mid[0] + baseVec[0] * fm + n[0] * T / 2, mid[1] + baseVec[1] * fm + n[1] * T / 2, mid[2] + baseVec[2] * fm + n[2] * T / 2], heading: this.h });
+    });
+    this.opts.rideOffset = null;
+    goTo(L, null);
+    return this;
+  }
+
+  /**
+   * Pass through an enclosed structure (temple, hall, hangar...): solid,
+   * visible walls and ceiling close around the ramp, with duck/dodge blocks
+   * inside. Scenery decorates it by `kind`.
+   */
+  structure(kind, pattern, opts = {}) {
+    const prev = this.opts.tunnel;
+    const t = { side: opts.side ?? 300, top: opts.top ?? 560, bottom: opts.bottom ?? 520, ceiling: true, hidden: false, color: opts.wallColor || [0.5, 0.45, 0.35], ribColor: opts.ribColor || [1.0, 0.6, 0.25], ribSpacing: 700, structure: kind };
+    this.opts.tunnel = t;
+    if (this.line.length) this.line[this.line.length - 1].tunnel = { ...t };
+    const from = this.line.length - 1;
+    this.dodgeRun(pattern, { color: opts.blockColor || [0.55, 0.5, 0.4], edge: opts.edge ?? 1.0, slope: opts.slope });
+    this.opts.tunnel = prev;
+    this.line[this.line.length - 1].tunnel = prev ? { ...prev } : null;
+    this.structures.push({ kind, from, to: this.line.length - 1 });
     return this;
   }
 
@@ -445,7 +540,7 @@ function addEnclosure(m, line) {
           pts.push(pt(s, side * lat, s.yb), pt(s, side * lat, s.yt + (t.ceiling ? thick : 0)));
         }
       }
-      m.brushes.push({ points: pts, kind: 'wall', color, edge: 0.45, hidden: !!t.hidden });
+      m.brushes.push({ points: pts, kind: 'wall', color, edge: t.structure ? 0.7 : 0.45, hidden: !!t.hidden });
     }
     if (t.ceiling) {
       const pts = [];
@@ -517,6 +612,9 @@ export function addCourse(b, cfg) {
   m.forks = course.forks;
   m.needles = course.needles;
   m.jumps = course.jumps;
+  m.obstacles = course.obstacles;
+  m.structures = course.structures;
+  m.boosts = course.boosts;
   m.brushes.push(...course.extra);
   m.checkpoints = [
     { idx: 0, pos: spawn, yaw: h * D2R, hint: cfg.startHint || null, start: true },

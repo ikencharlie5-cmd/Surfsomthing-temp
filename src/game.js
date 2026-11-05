@@ -6,9 +6,10 @@ import { Movement, Player, HULL, EYE_OFFSET } from './physics/movement.js';
 import { V3 } from './physics/vec.js';
 import { buildBrushMesh, buildGate, buildZoneBox, buildRibs, buildDecor, faceMaterial } from './render/worldMesh.js';
 import { disposeTree } from './render/renderer.js';
-import { buildTheme } from './render/scenery.js';
+import { buildTheme, buildSetPieces } from './render/scenery.js';
 import { EndlessTrack } from './maps/endless.js';
 import { SurfBot } from './sim/bot.js';
+import { checkBoosts } from './sim/boosts.js';
 import * as store from './storage.js';
 
 export const TICK = 1 / 100;
@@ -80,6 +81,8 @@ export class Game {
       const theme = buildTheme(map, this.r.quality);
       if (theme) { this.root.add(theme); this.animated.push(theme); }
     }
+    const pieces = buildSetPieces(map, this.r.quality);
+    if (pieces) { this.root.add(pieces); this.animated.push(pieces); }
     Object.assign(this.mv.cv, map.cvars || {});
     let minY = 0;
     for (const b of brushes) minY = Math.min(minY, b.min.y);
@@ -161,6 +164,7 @@ export class Game {
     this.speedHist = new Float32Array(120);
     this.histPos = 0;
     this.scrubMarks = [];
+    this.usedBoosts = new Set();
     if (this.mode === 'endless') { this.piece = 0; this.distance = 0; }
     this._respawn(0);
     this.mv.cv.autobhop = this.settings.autobhop;
@@ -256,6 +260,10 @@ export class Game {
       this.histPos++;
     }
 
+    if (this.mode === 'map' && checkBoosts(this.map.boosts, this.usedBoosts, p) && !this.demo) {
+      this.audio.play('boost');
+      this.ev.onBoost?.();
+    }
     const idx = this.progress._locate(p.pos);
     if (this.mode === 'map') this._mapProgress(p, idx);
     else this._endlessProgress(p, idx);

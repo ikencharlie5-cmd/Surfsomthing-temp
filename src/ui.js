@@ -93,6 +93,7 @@ export class UI {
       card.dataset.map = m.id;
       if (open) card.dataset.action = 'play-map';
       const extras = [
+        m.twist ? `<b>${esc(m.twist)}</b>` : '',
         m.needles?.length ? `${m.needles.length} needle${m.needles.length > 1 ? 's' : ''}` : '',
         m.jumps?.length ? `${m.jumps.length} long jump${m.jumps.length > 1 ? 's' : ''}` : '',
         m.forks?.length ? `${m.forks.length} fast line${m.forks.length > 1 ? 's' : ''}` : '',

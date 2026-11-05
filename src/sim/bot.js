@@ -64,7 +64,7 @@ export class SurfBot {
     const px = a.p[0] + (b.p[0] - a.p[0]) * t, pz = a.p[2] + (b.p[2] - a.p[2]) * t;
     const e = (player.pos.x - px) * rx + (player.pos.z - pz) * rz;
     const faceSign = b.face === 'right' ? 1 : -1;
-    const target = faceSign * b.width * this.offset;
+    const target = faceSign * b.width * (b.offset ?? this.offset);
     const along = Math.atan2(-tx, -tz);
     if (player.onGround) this.touchedGround = true;
     if (this.walking && (player.onGround || !this.touchedGround)) {

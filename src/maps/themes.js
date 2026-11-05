@@ -102,8 +102,23 @@ export const THEMES = [
 
 export const themeById = (id) => THEMES.find((t) => t.id === id);
 
+/** Looks for the set pieces you pass through (interior walls, ribs, blocks). */
+export const STRUCTURES = {
+  temple: { wallColor: [0.42, 0.45, 0.32], ribColor: [1.0, 0.6, 0.2], blockColor: [0.5, 0.52, 0.4] },
+  ruin: { wallColor: [0.3, 0.38, 0.28], ribColor: [0.4, 1.0, 0.5], blockColor: [0.42, 0.46, 0.36] },
+  hall: { wallColor: [0.4, 0.4, 0.45], ribColor: [1.0, 0.55, 0.2], blockColor: [0.48, 0.46, 0.5] },
+  hangar: { wallColor: [0.45, 0.5, 0.6], ribColor: [0.3, 0.9, 1.0], blockColor: [0.6, 0.62, 0.7] },
+  vault: { wallColor: [0.12, 0.2, 0.16], ribColor: [1.0, 0.25, 0.2], blockColor: [0.2, 0.3, 0.25] },
+  atrium: { wallColor: [0.15, 0.2, 0.35], ribColor: [1.0, 0.3, 0.85], blockColor: [0.25, 0.7, 0.9] },
+  lavatube: { wallColor: [0.12, 0.07, 0.07], ribColor: [1.0, 0.4, 0.08], blockColor: [0.18, 0.1, 0.1] },
+  seacave: { wallColor: [0.35, 0.2, 0.3], ribColor: [0.3, 1.0, 0.9], blockColor: [0.9, 0.45, 0.55] },
+  crystal: { wallColor: [0.2, 0.25, 0.4], ribColor: [0.5, 0.9, 1.0], blockColor: [0.45, 0.75, 1.0] },
+  glowworm: { wallColor: [0.1, 0.12, 0.16], ribColor: [0.3, 0.8, 1.0], blockColor: [0.2, 0.25, 0.3] },
+  warpgate: { wallColor: [0.15, 0.05, 0.25], ribColor: [1.0, 0.3, 0.9], blockColor: [0.4, 0.9, 1.0] },
+};
+
 /** Build one generated map for a theme and tier. */
-export function generatedMap(themeId, tier, { id, name, description, seed }) {
+export function generatedMap(themeId, tier, { id, name, description, seed, twist = {} }) {
   const th = themeById(themeId);
   const T = TIER[tier];
   // each map gets its own slightly shifted fog/sky tint so a theme's maps don't look cloned
@@ -114,16 +129,19 @@ export function generatedMap(themeId, tier, { id, name, description, seed }) {
   }
   const b = new MapBuilder(id, name, {
     difficulty: tier, description,
-    env, theme: th.theme(seed), cvars: th.cvars || null,
+    env, theme: th.theme(seed), cvars: twist.gravity ? { ...(th.cvars || {}), gravity: twist.gravity } : th.cvars || null,
   });
+  const tw = { ...twist };
+  if (tw.structure) tw.structure = { ...tw.structure, opts: { ...STRUCTURES[tw.structure.kind], ...(tw.structure.opts || {}) } };
   addCourse(b, {
     ramp: { width: T.width, height: Math.round(T.width * 1.45), color: th.palette[0], minSpeed: T.minSpeed, tunnel: th.tunnel || null },
     platformColor: th.platform,
     build: (c) => generateCourse(c, {
-      seed, tier, palette: th.palette, needle: th.needle, forks: th.forks !== false, jumpScale: th.jumpScale,
+      seed, tier, palette: th.palette, needle: th.needle, forks: th.forks !== false, jumpScale: th.jumpScale, twist: tw,
       tunnel: th.tunnel || null, tunnelToggle: !!th.tunnelToggle,
     }),
   });
   if (th.post) th.post(b, seed);
+  b.map.twist = twist.label || null;
   return b.build();
 }

@@ -1850,3 +1850,162 @@ function gatehouse(geo, lights, n, rng) {
     lights.dot(p, [1.0, 0.35, 0.05], 190, 0, 0);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Set pieces: the buildings you ride through, and boost rings
+// ---------------------------------------------------------------------------
+
+const SET_LOOK = {
+  temple: { outer: [0.36, 0.4, 0.28], trim: [1.0, 0.65, 0.2], light: [1.0, 0.55, 0.15], steps: 6, rise: 2600 },
+  ruin: { outer: [0.26, 0.34, 0.24], trim: [0.3, 1.0, 0.45], light: [0.4, 1.0, 0.5], steps: 3, rise: 1500, vines: true },
+  hall: { outer: [0.36, 0.36, 0.4], trim: [1.0, 0.55, 0.2], light: [1.0, 0.6, 0.25], roof: true, glass: true, rise: 1800 },
+  hangar: { outer: [0.4, 0.45, 0.55], trim: [0.3, 0.9, 1.0], light: [1.0, 0.85, 0.3], blink: 1.2, rise: 1600 },
+  vault: { outer: [0.1, 0.16, 0.13], trim: [1.0, 0.2, 0.15], light: [1.0, 0.2, 0.15], blink: 0.8, rise: 900 },
+  atrium: { outer: [0.12, 0.16, 0.3], trim: [1.0, 0.3, 0.85], light: [0.3, 0.9, 1.0], tower: 9000, rise: 600 },
+  lavatube: { outer: [0.1, 0.06, 0.06], trim: [1.0, 0.35, 0.05], light: [1.0, 0.4, 0.08], rock: true, rise: 900 },
+  seacave: { outer: [0.32, 0.2, 0.3], trim: [0.3, 1.0, 0.9], light: [0.3, 1.0, 0.9], rock: true, rise: 1000 },
+  crystal: { outer: [0.16, 0.2, 0.32], trim: [0.5, 0.9, 1.0], light: [0.5, 0.9, 1.0], rock: true, crystals: true, rise: 900 },
+  glowworm: { outer: [0.08, 0.1, 0.13], trim: [0.3, 0.8, 1.0], light: [0.4, 0.85, 1.0], rock: true, worms: true, rise: 900 },
+  warpgate: { outer: [0.1, 0.03, 0.18], trim: [1.0, 0.3, 0.9], light: [0.4, 0.9, 1.0], rings: true, rise: 0 },
+};
+
+export function buildSetPieces(map, quality = 'high') {
+  const structures = map.structures || [], boosts = map.boosts || [];
+  if (!structures.length && !boosts.length) return null;
+  const group = new THREE.Group();
+  const geo = new Geo();
+  const lights = new Lights();
+  const rng = rand((map.theme?.seed || 7) + 991);
+  const density = DENSITY[quality] ?? 1;
+
+  for (const st of structures) {
+    const A = map.line[st.from], Z = map.line[st.to];
+    const look = SET_LOOK[st.kind] || SET_LOOK.temple;
+    const t = A.tunnel || Z.tunnel || map.line[st.from + 1].tunnel;
+    const dx = Z.p[0] - A.p[0], dz = Z.p[2] - A.p[2];
+    const len = Math.hypot(dx, dz) || 1;
+    const f = [dx / len, 0, dz / len], r = [-dz / len, 0, dx / len];
+    const slope = (A.p[1] - Z.p[1]) / len;
+    const ridge = (s) => A.p[1] - slope * s;
+    const P = (s, lat, y) => [A.p[0] + f[0] * s + r[0] * lat, y, A.p[2] + f[2] * s + r[2] * lat];
+    const L = A.width + t.side;
+    const top = (s) => ridge(s) + t.top;
+    const bot = (s) => ridge(s) - A.height - (t.bottom ?? 520);
+    const yaw = Math.atan2(f[0], f[2]);
+    // a solid-looking mass around the corridor: side blocks below the roof line, roof above
+    const slab = (s0, s1, l0, l1, y0fn, y1fn, col, glow = 0) => {
+      const c = [P(s0, l0, y0fn(s0)), P(s0, l1, y0fn(s0)), P(s1, l1, y0fn(s1)), P(s1, l0, y0fn(s1))];
+      const u = [P(s0, l0, y1fn(s0)), P(s0, l1, y1fn(s0)), P(s1, l1, y1fn(s1)), P(s1, l0, y1fn(s1))];
+      for (let k = 0; k < 4; k++) geo.quad(c[k], c[(k + 1) % 4], u[(k + 1) % 4], u[k], col, glow);
+      geo.quad(u[0], u[1], u[2], u[3], mix(col, [0, 0, 0], 0.2), glow);
+    };
+    if (look.rock) {
+      for (let k = 0; k < 40 * density; k++) {
+        const s = rng() * len, side = rng() < 0.5 ? -1 : 1;
+        const rad = 350 + rng() * 500;
+        const up = rng() < 0.4;
+        const c = up ? P(s, (rng() - 0.5) * L * 1.6, top(s) + rad * 0.8) : P(s, side * (L + rad * 0.8), ridge(s) - rng() * A.height);
+        geo.blob(c, rad, mix(look.outer, [0, 0, 0], rng() * 0.4), 0, rng, 0.8);
+      }
+    } else if (!look.rings) {
+      const steps = look.steps || 1;
+      for (let k = 0; k < steps; k++) {
+        const inset = k * 240;
+        const w0 = L + 40, w1 = L + 1300 - inset;
+        if (w1 <= w0 + 100) break;
+        const hTop = (s) => top(s) + 200 + (k + 1) * (look.rise / steps);
+        const col = mix(look.outer, [0.2, 0.2, 0.2], (k % 2) * 0.2);
+        slab(-inset * 0.2, len + inset * 0.2, -w1, -w0, bot, hTop, col);
+        slab(-inset * 0.2, len + inset * 0.2, w0, w1, bot, hTop, col);
+        slab(-inset * 0.2, len + inset * 0.2, -w0, w0, (s) => top(s) + 40, hTop, col);
+        geo.line(P(0, -w1, hTop(0)), P(0, w1, hTop(0)), look.trim);
+        geo.line(P(len, -w1, hTop(len)), P(len, w1, hTop(len)), look.trim);
+      }
+      if (look.roof) {
+        const yR = (s) => top(s) + look.rise + 260;
+        for (let k = 0; k < 10; k++) {
+          const s0 = (k / 10) * len, s1 = ((k + 1) / 10) * len;
+          geo.quad(P(s0, -L - 1300, yR(s0)), P(s1, -L - 1300, yR(s1)), P(s1, 0, yR(s1) + 1400), P(s0, 0, yR(s0) + 1400), ROOF);
+          geo.quad(P(s0, L + 1300, yR(s0)), P(s0, 0, yR(s0) + 1400), P(s1, 0, yR(s1) + 1400), P(s1, L + 1300, yR(s1)), ROOF);
+        }
+      }
+      if (look.tower) slab(0, len, -L - 900, L + 900, (s) => top(s) + look.rise, (s) => top(s) + look.tower, look.outer);
+      // doorway trim at the entrance and exit
+      for (const s of [0, len]) {
+        geo.line(P(s, -L, bot(s) + A.height), P(s, -L, top(s)), look.trim);
+        geo.line(P(s, L, bot(s) + A.height), P(s, L, top(s)), look.trim);
+        geo.line(P(s, -L, top(s)), P(s, L, top(s)), look.trim);
+      }
+    }
+    // inside: a glowing strip along the ceiling so the interior reads at speed
+    for (let s = 0; s < len; s += 400) {
+      geo.line(P(s, -L * 0.5, top(s) - 8), P(Math.min(len, s + 400), -L * 0.5, top(Math.min(len, s + 400)) - 8), look.trim);
+      geo.line(P(s, L * 0.5, top(s) - 8), P(Math.min(len, s + 400), L * 0.5, top(Math.min(len, s + 400)) - 8), look.trim);
+    }
+    // inside: lights along the walls (torches, lamps, glowworms...)
+    for (let s = 300; s < len; s += 650) {
+      for (const side of [-1, 1]) {
+        const p = P(s, side * (L - 30), ridge(s) + t.top * 0.35);
+        lights.dot(p, look.light, look.worms ? 30 : 140, look.blink ?? (st.kind === 'temple' || st.kind === 'hall' ? 7 + rng() * 4 : 0), rng());
+        lights.dot(p, look.light, 220, 0, 0);
+        if (look.glass && rng() < 0.7) geo.box(P(s + 200, side * (L - 6), ridge(s) + t.top * 0.15), [12, 300, 160], yaw + Math.PI / 2, GLASS[Math.floor(rng() * GLASS.length)], 0.95);
+      }
+      if (look.worms) for (let k = 0; k < 14; k++) lights.dot(P(s + rng() * 600, (rng() - 0.5) * 2 * L, top(s) - 20), [0.4, 0.85, 1.0], 18, 0, 0);
+      if (look.crystals && rng() < 0.8) {
+        const side = rng() < 0.5 ? -1 : 1;
+        const base = P(s, side * (L - 20), top(s) - 10);
+        geo.cyl(base, add(base, [-r[0] * side * 160, -260, -r[2] * side * 160]), 50, 0, 5, look.light, 0.8);
+      }
+      if (look.vines) for (let k = 0; k < 3; k++) {
+        const v = P(s + rng() * 600, (rng() - 0.5) * 2 * L, top(s));
+        geo.line(v, add(v, [0, -(150 + rng() * 300), 0]), [0.2, 0.8, 0.35]);
+      }
+    }
+    if (look.rings) {
+      for (let s = 0; s <= len; s += 500) {
+        const c = P(s, 0, (top(s) + bot(s)) / 2);
+        const R = Math.max(L, (top(s) - bot(s)) / 2) + 60;
+        let prev = null;
+        for (let k = 0; k <= 24; k++) {
+          const a = (k / 24) * Math.PI * 2;
+          const p = add(c, add(scale(r, Math.cos(a) * R), [0, Math.sin(a) * R, 0]));
+          if (prev) geo.line(prev, p, s % 1000 ? look.trim : look.light);
+          prev = p;
+        }
+      }
+    }
+    // temple entrance guardians
+    if (st.kind === 'temple' || st.kind === 'ruin') {
+      for (const side of [-1, 1]) {
+        const b = P(-150, side * (L + 420), bot(0) + A.height * 0.4);
+        geo.box(add(b, [0, 380, 0]), [420, 760, 380], yaw, look.outer);
+        geo.box(add(b, [0, 800, 0]), [460, 80, 420], yaw, mix(look.outer, [0, 0, 0], 0.3));
+        lights.dot(add(add(b, [0, 520, 0]), scale(f, -200)), look.trim, 45, 0, 0);
+      }
+    }
+  }
+
+  const mat = propMaterial({ dir: [-0.35, 0.5, -0.8], color: [0.5, 0.5, 0.6], ambient: [0.22, 0.2, 0.26], lamp: 0.6, lampColor: [1.0, 0.75, 0.5] });
+  finish(group, geo, mat);
+  finishLights(group, lights);
+
+  // boost rings: glowing, spinning hoops where you fly through
+  const ringMats = [];
+  for (const b of boosts) {
+    const ring = new THREE.Group();
+    ring.position.set(...b.center);
+    ring.rotation.y = (b.heading * Math.PI) / 180;
+    const col = new THREE.Color(...(b.color || [0.3, 1, 1]));
+    const torus = new THREE.Mesh(new THREE.TorusGeometry(b.radius * 0.8, 26, 10, 48), new THREE.MeshBasicMaterial({ color: col.clone().multiplyScalar(2.4), fog: true }));
+    const inner = new THREE.Mesh(new THREE.TorusGeometry(b.radius * 0.62, 10, 8, 48), new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 0.3, 0.9).multiplyScalar(2), fog: true }));
+    ring.add(torus, inner);
+    group.add(ring);
+    ringMats.push(inner);
+  }
+  const base = group.userData.update;
+  group.userData.update = (time, cam) => {
+    base(time, cam);
+    ringMats.forEach((m, i) => { m.rotation.z = time * 2 + i; m.scale.setScalar(1 + Math.sin(time * 5 + i) * 0.05); });
+  };
+  return group;
+}

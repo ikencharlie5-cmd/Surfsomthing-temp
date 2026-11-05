@@ -8,7 +8,7 @@ for (const l of lines) {
   const m = l.match(/^([\w-]+) (\d+) -> (\d+)/);
   if (!m) continue;
   const [, id, , seed] = m;
-  const re = new RegExp(`(G\\('\\w+', '\\w+', '${id}', '[^']+', '(?:[^'\\\\]|\\\\.)*', )(\\d+)\\)`);
+  const re = new RegExp(`(G\\('\\w+', '\\w+', '${id}', '(?:[^'\\\\]|\\\\.)*', '(?:[^'\\\\]|\\\\.)*', \\{.*?\\}, )(\\d+)\\)`);
   if (re.test(src)) { src = src.replace(re, `$1${seed})`); n++; }
 }
 fs.writeFileSync(file, src);
