@@ -55,18 +55,25 @@ Start with **First Wave**, the tutorial map. It shows hints at each stage.
 - **Exact collision:** ramps are convex brushes. Box traces use the brush's
   Minkowski sum with the player box (face, axis and edge-bevel planes), so you
   don't snag on seams between ramp segments.
-- **Six continuous momentum maps.** None of them teleport you, so you never
-  lose speed between sections. Each starts with a big curved drop-in. Fall
-  and you respawn standing still at the last checkpoint (the spinning diamond).
+- **Eleven continuous momentum maps.** None of them teleport you, so you
+  never lose speed between sections. Each starts with a steep drop-in that
+  flattens out, so you start with speed. Fall and you respawn standing still
+  at the last checkpoint (the spinning diamond). Five maps are **earned** by
+  finishing others.
 
-  | Map | Difficulty | Space |
-  | --- | --- | --- |
-  | First Wave | tutorial | open sky, with hints |
-  | Neon Drift | easy | open sky, 1 fast line |
-  | Night Tunnel | medium | fully enclosed ribbed tunnel |
-  | Canyon Run | medium | tall canyon walls, red sky, 1 fast line |
-  | Overclock | hard | open sky, thin ramps, 2 fast lines |
-  | Data Core | hard | tight enclosed shaft |
+  | Map | Difficulty | Space | Unlock |
+  | --- | --- | --- | --- |
+  | First Wave | tutorial | open sky, with hints | open |
+  | Neon Drift | easy | open sky, 1 fast line | open |
+  | Night Tunnel | medium | fully enclosed ribbed tunnel | open |
+  | Canyon Run | medium | tall canyon walls, red sky | open |
+  | Overclock | hard | open sky, thin ramps, 2 fast lines | open |
+  | Data Core | hard | tight enclosed shaft | open |
+  | Skyline Rush | medium | neon city, lit towers | finish Neon Drift |
+  | Vapor Coast | easy | pastel sunset over an ocean | finish Night Tunnel |
+  | Crystal Cave | medium | enclosed ice cave, glowing crystals | finish Canyon Run |
+  | Orbital | hard | space station + open space, lower gravity | finish Overclock |
+  | Final Overdrive | expert | everything: open, canyon, tunnel, 3 fast lines | finish Data Core, Orbital and Crystal Cave |
 - **Fast lines:** at some gaps, a long jump straight ahead lands directly on a
   later ramp, but only if you're carrying enough speed. Slower riders take a
   safe detour to the side.
@@ -124,6 +131,8 @@ A surf bot also uses the real physics to play:
 - every fork's fast line
 - 20+ pieces of several endless seeds
 
+The tests also check that every locked map can eventually be unlocked.
+
 A map change that makes any of these impossible fails the tests.
 
 ### Making a map
@@ -154,6 +163,13 @@ Rules of thumb the bot tests taught us:
 - Land on a short straight before a curve.
 - Add a gentle run-out after steep ramps.
 - Widen turns for fast sections. A radius of about v²/650 is comfortable.
+
+Scenery helpers: `addCity(map)` places solid lit towers that stay clear of the
+line, and `addCrystals(map)` grows decorative crystals inside enclosures.
+Per-map `env` settings control the sky (`true`, `false` or `'space'`), the
+floor (`floorMode: 'sea'`), fog and grid colour. Per-map `cvars` override
+physics (Orbital uses `{ gravity: 620 }`). `unlock: { after: [...] }` sets the
+maps that must be finished first.
 
 ## Ideas for later
 

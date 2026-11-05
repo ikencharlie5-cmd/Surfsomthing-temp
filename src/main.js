@@ -5,7 +5,7 @@ import { AudioEngine } from './audio.js';
 import { Input } from './input.js';
 import { Game, TICK } from './game.js';
 import { UI, randomSeed, dailySeed } from './ui.js';
-import { MAPS, getMap } from './maps/index.js';
+import { MAPS, getMap, isUnlocked } from './maps/index.js';
 import * as store from './storage.js';
 
 const canvas = document.getElementById('view');
@@ -16,6 +16,15 @@ const input = new Input(canvas, settings);
 
 let state = 'menu'; // menu | playing | paused | finished
 let currentMap = null;
+let lockedBefore = [];
+let pendingNext = null;
+const unlocked = (m) => isUnlocked(m, store.hasFinished);
+/** Next playable map after the current one (prefers anything just unlocked). */
+function nextMap(justUnlocked = []) {
+  if (justUnlocked.length) return justUnlocked[0];
+  const idx = MAPS.indexOf(currentMap);
+  return MAPS.slice(idx + 1).find(unlocked) || null;
+}
 let currentSeed = null;
 
 const game = new Game(renderer, audio, settings, {
@@ -32,9 +41,13 @@ const game = new Game(renderer, audio, settings, {
   onFinish(r) {
     state = 'finished';
     input.unlock();
+    const newly = lockedBefore.filter(unlocked);
+    lockedBefore = MAPS.filter((m) => !unlocked(m));
+    r.unlocked = newly;
+    if (newly.length) setTimeout(() => audio.play('record'), 700);
+    pendingNext = nextMap(newly);
     setTimeout(() => {
-      const idx = MAPS.indexOf(currentMap);
-      ui.showFinish(r, currentMap, idx >= 0 && idx < MAPS.length - 1);
+      ui.showFinish(r, currentMap, !!pendingNext, newly.length ? `Play ${pendingNext.name}` : 'Next map');
     }, 250);
   },
   onEndlessOver(r) {
@@ -77,6 +90,8 @@ function startDemo() {
 }
 
 function startMap(map) {
+  if (!map || !unlocked(map)) return;
+  lockedBefore = MAPS.filter((m) => !unlocked(m));
   currentMap = map;
   currentSeed = null;
   game.loadMap(map);
@@ -133,7 +148,7 @@ function handleAction(action, data) {
   if (!audio.music?.timer) { audio.musicOn(true); }
   audio.play('click');
   switch (action) {
-    case 'maps': ui.renderMaps(MAPS); ui.push('maps'); break;
+    case 'maps': ui.renderMaps(MAPS, unlocked); ui.push('maps'); break;
     case 'endless': ui.renderEndless(); ui.push('endless'); break;
     case 'endless-random': ui.setEndlessSeed(randomSeed()); break;
     case 'endless-daily': ui.setEndlessSeed(dailySeed()); break;
@@ -163,11 +178,7 @@ function handleAction(action, data) {
       if (currentSeed) startEndless(currentSeed);
       else if (currentMap) startMap(currentMap);
       break;
-    case 'next': {
-      const idx = MAPS.indexOf(currentMap);
-      if (idx >= 0 && idx < MAPS.length - 1) startMap(MAPS[idx + 1]);
-      break;
-    }
+    case 'next': startMap(pendingNext); break;
     case 'quit': quitToMenu(); break;
     default: break;
   }

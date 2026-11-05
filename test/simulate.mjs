@@ -18,7 +18,7 @@ export function buildWorld(map) {
 export function playSection(map, world, cp, opts = {}) {
   const c = map.checkpoints[cp];
   const next = opts.full ? null : map.checkpoints[cp + 1];
-  const mv = new Movement(world);
+  const mv = new Movement(world, map.cvars || {});
   const p = new Player();
   p.teleport(c.pos);
   const line = map.line;

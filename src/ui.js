@@ -65,21 +65,37 @@ export class UI {
   back() { const prev = this.stack.pop(); if (prev) this.show(prev); else this.show('menu'); }
   showHud(on) { this.hud.root.classList.toggle('hidden', !on); }
 
-  renderMaps(maps) {
+  renderMaps(maps, isUnlocked) {
     const list = $('#map-list');
     list.innerHTML = '';
+    const nameOf = (id) => maps.find((x) => x.id === id)?.name || id;
     for (const m of maps) {
       const pb = store.getBoard(m.id)[0];
+      const open = isUnlocked(m);
       const card = document.createElement('div');
-      card.className = 'card';
+      card.className = 'card' + (open ? '' : ' locked');
       card.tabIndex = 0;
-      card.dataset.action = 'play-map';
       card.dataset.map = m.id;
+      if (open) card.dataset.action = 'play-map';
+      const space = m.env?.floorMode === 'sea' ? 'ocean' : m.env?.sky === 'space' ? 'space' : m.brushes.some((b) => b.kind === 'building') ? 'city'
+        : m.env?.sky === false ? 'enclosed' : m.ribs?.length ? 'canyon' : 'open sky';
+      if (!open) {
+        const need = m.unlock.after.filter((id) => !store.hasFinished(id)).map(nameOf);
+        card.innerHTML = `
+          <div class="diff ${m.difficulty}">${m.difficulty}</div>
+          <div class="title"><span class="lock"></span>${esc(m.name)}</div>
+          <div class="desc">${esc(m.description)}</div>
+          <div class="muted small">${space}</div>
+          <div class="req">Finish ${need.map(esc).join(' + ')} to unlock</div>`;
+        list.appendChild(card);
+        continue;
+      }
       card.innerHTML = `
+        ${m.unlock && !pb ? '<div class="new-badge">NEW</div>' : ''}
         <div class="diff ${m.difficulty}">${m.difficulty}</div>
         <div class="title">${esc(m.name)}</div>
         <div class="desc">${esc(m.description)}</div>
-        <div class="muted small">${m.checkpoints.length - 1} checkpoints${m.forks?.length ? ` · ${m.forks.length} fast line${m.forks.length > 1 ? 's' : ''}` : ''}${m.env?.sky === false ? ' · enclosed' : m.ribs?.length ? ' · canyon' : ' · open sky'}</div>
+        <div class="muted small">${space} · ${m.checkpoints.length - 1} checkpoints${m.forks?.length ? ` · ${m.forks.length} fast line${m.forks.length > 1 ? 's' : ''}` : ''}${m.cvars?.gravity ? ' · low gravity' : ''}</div>
         <div class="pb">${pb ? 'PB ' + fmtTime(pb.time) : 'No time set'}</div>`;
       card.addEventListener('keydown', (e) => { if (e.key === 'Enter') this.h.onAction('play-map', { map: m.id }); });
       list.appendChild(card);
@@ -122,7 +138,7 @@ export class UI {
       `<tr><td>${i + 1}</td><td class="t">${fmtTime(e.time)}</td><td>${new Date(e.date).toLocaleString()}</td></tr>`).join('')}</table>`;
   }
 
-  showFinish(r, map, hasNext) {
+  showFinish(r, map, hasNext, nextLabel = 'Next map') {
     const title = $('#finish-title');
     title.textContent = r.pb ? (r.prevBest ? 'New personal best!' : 'First clear!') : r.rank ? `Finished · #${r.rank}` : 'Finished';
     title.classList.toggle('record', r.pb);
@@ -135,6 +151,12 @@ export class UI {
     $('#finish-detail').textContent = bits.join(' · ');
     const sp = $('#finish-splits');
     sp.innerHTML = '';
+    if (r.unlocked?.length) {
+      const u = document.createElement('div');
+      u.className = 'unlocked';
+      u.textContent = `UNLOCKED: ${r.unlocked.map((m) => m.name).join(', ')}`;
+      sp.appendChild(u);
+    }
     r.splits.forEach((t, i) => {
       const pbt = r.pbSplits?.[i];
       const d = pbt != null ? t - pbt : null;
@@ -144,7 +166,7 @@ export class UI {
       sp.appendChild(row);
     });
     const next = $('#finish-next');
-    next.textContent = 'Next map';
+    next.textContent = nextLabel;
     next.classList.toggle('hidden', !hasNext);
     next.dataset.action = 'next';
     this.show('finish');

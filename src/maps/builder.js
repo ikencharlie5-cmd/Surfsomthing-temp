@@ -31,6 +31,9 @@ export class MapBuilder {
       line: [],
       ribs: [],
       env: opts.env || null,
+      cvars: opts.cvars || null, // physics overrides, e.g. { gravity: 620 }
+      unlock: opts.unlock || null, // { after: [mapIds] } must all be finished
+      decor: [],
       killY: opts.killY ?? -5000,
     };
   }
@@ -461,4 +464,96 @@ export function addCourse(b, cfg) {
   b.trigger('end', [g[0] - gs, gy - gs, g[2] - gs], [g[0] + gs, gy + gs, g[2] + gs], { heading: course.h, center: [g[0], gy, g[2]] });
   m.killY = Math.min(m.killY, course.minY - 4000);
   return course;
+}
+
+// ---------------------------------------------------------------------------
+// Scenery
+// ---------------------------------------------------------------------------
+
+function rng(seed) {
+  let a = seed >>> 0 || 1;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** Horizontal distance from (x,z) to the guide line, and the line height there. */
+function nearLine(line, x, z) {
+  let best = Infinity, y = 0;
+  for (let i = 0; i < line.length - 1; i++) {
+    const a = line[i].p, b = line[i + 1].p;
+    const dx = b[0] - a[0], dz = b[2] - a[2];
+    const l2 = dx * dx + dz * dz || 1;
+    const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[2]) * dz) / l2));
+    const d = Math.hypot(x - (a[0] + dx * t), z - (a[2] + dz * t));
+    if (d < best) { best = d; y = a[1] + (b[1] - a[1]) * t; }
+  }
+  return { d: best, y };
+}
+
+/**
+ * Neon city: towers on both sides of the course. They're solid (you can
+ * crash into one if you fly way off line) but kept clear of the ride.
+ */
+export function addCity(m, { seed = 1, spacing = 1500, clear = 1700, colors = [COLORS.cyan, COLORS.magenta, COLORS.yellow, COLORS.purple] } = {}) {
+  const r = rng(seed);
+  const line = m.line;
+  for (let i = 0; i < line.length - 1; i++) {
+    const a = line[i].p, b = line[i + 1].p;
+    const len = Math.hypot(b[0] - a[0], b[2] - a[2]);
+    const n = Math.max(1, Math.round(len / spacing));
+    for (let k = 0; k < n; k++) {
+      const t = (k + r()) / n;
+      const px = a[0] + (b[0] - a[0]) * t, pz = a[2] + (b[2] - a[2]) * t, py = a[1] + (b[1] - a[1]) * t;
+      const [rx, rz] = rightOf(line[i].h);
+      for (const side of [-1, 1]) {
+        if (r() < 0.25) continue;
+        const lat = side * (clear + line[i].width + r() * 2600);
+        const cx = px + rx * lat, cz = pz + rz * lat;
+        const sx = 700 + r() * 900, sz = 700 + r() * 900;
+        // keep clear of every part of the course
+        if (nearLine(line, cx, cz).d < clear + Math.max(sx, sz) * 0.75) continue;
+        const top = py + (r() < 0.4 ? 1500 + r() * 3500 : -300 + r() * 1400);
+        const bottom = py - 9000;
+        m.brushes.push({
+          points: [[-1, -1], [-1, 1], [1, -1], [1, 1]].flatMap(([u, v]) => [[cx + u * sx / 2, bottom, cz + v * sz / 2], [cx + u * sx / 2, top, cz + v * sz / 2]]),
+          kind: 'building', color: colors[Math.floor(r() * colors.length)], edge: 0.55,
+        });
+      }
+    }
+  }
+}
+
+/** Glowing crystals growing from the walls of an enclosed section (decoration only). */
+export function addCrystals(m, { seed = 7, every = 500, colors = [COLORS.cyan, [0.5, 0.8, 1.0], COLORS.purple] } = {}) {
+  const r = rng(seed);
+  (m.decor ??= []);
+  const line = m.line;
+  for (let i = 0; i < line.length - 1; i++) {
+    const t0 = line[i].tunnel;
+    if (!t0) continue;
+    const a = line[i].p, b = line[i + 1].p;
+    const len = Math.hypot(b[0] - a[0], b[2] - a[2]);
+    const n = Math.max(1, Math.round(len / every));
+    const [rx, rz] = rightOf(line[i].h);
+    const L = line[i].width + t0.side;
+    for (let k = 0; k < n; k++) {
+      const t = (k + r()) / n;
+      const p = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+      const side = r() < 0.5 ? -1 : 1;
+      const onCeiling = t0.ceiling && r() < 0.35;
+      const s = 60 + r() * 140;
+      const pos = onCeiling
+        ? [p[0] + rx * (r() - 0.5) * L * 1.6, p[1] + (t0.top ?? 750) - s * 0.6, p[2] + rz * (r() - 0.5) * L * 1.6]
+        : [p[0] + rx * side * (L - s * 0.4), p[1] - line[i].height * (0.3 + r() * 0.9), p[2] + rz * side * (L - s * 0.4)];
+      m.decor.push({
+        pos, scale: [s * 0.45, s * (1.4 + r() * 1.5), s * 0.45],
+        rot: [onCeiling ? Math.PI : (r() - 0.5) * 0.8, r() * Math.PI, side * (0.4 + r() * 0.5) * (onCeiling ? 0 : 1)],
+        color: colors[Math.floor(r() * colors.length)],
+      });
+    }
+  }
 }

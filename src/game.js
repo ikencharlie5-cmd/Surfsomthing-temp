@@ -4,7 +4,7 @@ import { Brush } from './physics/brush.js';
 import { World, Trigger } from './physics/world.js';
 import { Movement, Player, HULL, EYE_OFFSET } from './physics/movement.js';
 import { V3 } from './physics/vec.js';
-import { buildBrushMesh, buildGate, buildZoneBox, buildRibs, buildCheckpointMarker, faceMaterial } from './render/worldMesh.js';
+import { buildBrushMesh, buildGate, buildZoneBox, buildRibs, buildCheckpointMarker, buildDecor, faceMaterial } from './render/worldMesh.js';
 import { disposeTree } from './render/renderer.js';
 import { EndlessTrack } from './maps/endless.js';
 import { SurfBot } from './sim/bot.js';
@@ -74,6 +74,8 @@ export class Game {
     const brushes = map.brushes.map((b) => this.world.add(new Brush(b.points, b)));
     this.root.add(buildBrushMesh(brushes));
     if (map.ribs?.length) this.root.add(buildRibs(map.ribs));
+    if (map.decor?.length) this.root.add(buildDecor(map.decor));
+    Object.assign(this.mv.cv, map.cvars || {});
     let minY = 0;
     for (const b of brushes) minY = Math.min(minY, b.min.y);
     this.mapMinY = minY;

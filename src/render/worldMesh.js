@@ -5,7 +5,7 @@ import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { SUN_DIR, FOG_COLOR, FOG_NEAR, FOG_FAR } from './renderer.js';
 
-const KIND = { surf: 0, floor: 1, wall: 2 };
+const KIND = { surf: 0, floor: 1, wall: 2, building: 3 };
 
 let sharedFaceMat = null;
 const lineMats = new Set();
@@ -54,7 +54,7 @@ export function buildBrushMesh(brushes) {
           pos.push(p.x, p.y, p.z);
           nrm.push(f.n.x, f.n.y, f.n.z);
           col.push(c[0], c[1], c[2]);
-          kind.push(k === 2 ? 2 : k === 1 && fk === 0 ? 0 : fk);
+          kind.push(k === 3 ? (f.n.y > 0.7 ? 1 : 3) : k === 2 ? 2 : k === 1 && fk === 0 ? 0 : fk);
         }
       }
     }
@@ -119,6 +119,33 @@ export function buildCheckpointMarker(cp) {
   d.scale.set(1, 1.8, 1);
   g.add(d);
   g.userData.update = (t) => { d.rotation.y = t * 1.5; d.position.y = Math.sin(t * 2) * 12; };
+  return g;
+}
+
+/** Decorations that don't collide: crystals, etc. */
+export function buildDecor(decor) {
+  const g = new THREE.Group();
+  const geo = new THREE.OctahedronGeometry(1, 0);
+  const byColor = new Map();
+  for (const d of decor) {
+    const key = d.color.join(',');
+    if (!byColor.has(key)) byColor.set(key, []);
+    byColor.get(key).push(d);
+  }
+  for (const [key, list] of byColor) {
+    const col = new THREE.Color(...key.split(',').map(Number));
+    const solid = new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial({ color: col.clone().multiplyScalar(0.35), transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending, fog: true }), list.length);
+    const wire = new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial({ color: col.clone().multiplyScalar(1.8), wireframe: true, fog: true }), list.length);
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
+    list.forEach((d, i) => {
+      e.set(d.rot[0], d.rot[1], d.rot[2]);
+      q.setFromEuler(e);
+      m.compose(new THREE.Vector3(...d.pos), q, new THREE.Vector3(d.scale[0], d.scale[1], d.scale[2]));
+      solid.setMatrixAt(i, m);
+      wire.setMatrixAt(i, m);
+    });
+    g.add(solid, wire);
+  }
   return g;
 }
 
@@ -248,6 +275,14 @@ void main() {
     // platforms: dark glass with bright grid
     vec3 base = vec3(0.02, 0.015, 0.06) + vColor * 0.04;
     c = base + vColor * (g * 0.5 * gf + g2 * 0.6);
+  } else if (vKind > 2.5) {
+    // buildings: dark facades with a grid of lit windows
+    vec2 cell = floor(uv / vec2(90.0, 120.0));
+    vec2 f = fract(uv / vec2(90.0, 120.0));
+    float win = step(0.25, f.x) * step(f.x, 0.75) * step(0.3, f.y) * step(f.y, 0.75);
+    float on = step(0.55, fract(sin(dot(cell, vec2(12.9898, 78.233))) * 43758.5453));
+    float flick = 0.85 + 0.15 * sin(uTime * 3.0 + cell.x * 7.0 + cell.y);
+    c = vec3(0.012, 0.008, 0.03) + vColor * win * on * 0.75 * flick * (1.0 - smoothstep(6000.0, 30000.0, vDepth) * 0.6);
   } else {
     // walls/undersides
     c = vColor * 0.03 + vec3(0.01, 0.0, 0.03) + vColor * fres * 0.15;

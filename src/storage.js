@@ -57,6 +57,8 @@ export function submitTime(mapId, time, splits, extra = {}) {
   const rank = top.indexOf(entry) + 1;
   return { rank, pb: time < prevBest, prevBest: isFinite(prevBest) ? prevBest : null };
 }
+export function hasFinished(mapId) { return getBoard(mapId).length > 0; }
+
 export function clearBoard(mapId) {
   try { localStorage.removeItem(NS + 'lb.' + mapId); localStorage.removeItem(NS + 'ghost.' + mapId); } catch { /* ignore */ }
 }

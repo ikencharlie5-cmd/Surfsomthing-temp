@@ -9,7 +9,7 @@ export const SUN_DIR = new THREE.Vector3(0, 0.07, -1).normalize();
 export const FOG_COLOR = new THREE.Color(0.32, 0.05, 0.3);
 export const FOG_NEAR = { value: 9000 };
 export const FOG_FAR = { value: 60000 };
-const DEFAULT_ENV = { sky: true, mountains: true, fogColor: [0.32, 0.05, 0.3], fogNear: 9000, fogFar: 60000, gridColor: null };
+const DEFAULT_ENV = { sky: true, mountains: true, floor: true, floorMode: 'grid', fogColor: [0.32, 0.05, 0.3], fogNear: 9000, fogFar: 60000, gridColor: null };
 
 const QUALITY = {
   low: { ratio: 0.85, bloom: false, bloomScale: 0, particles: 300 },
@@ -97,13 +97,16 @@ export class Renderer {
     this.scene.fog.color.copy(FOG_COLOR);
     this.scene.fog.near = e.fogNear;
     this.scene.fog.far = e.fogFar;
-    this.sky.visible = e.sky;
+    this.sky.visible = !!e.sky;
+    this.sky.material.uniforms.uMode.value = e.sky === 'space' ? 1 : 0;
+    this.floor.visible = e.floor;
+    this.floor.material.uniforms.uSea.value = e.floorMode === 'sea' ? 1 : 0;
     this.mountains.visible = e.mountains;
     this.scene.background = e.sky ? null : FOG_COLOR.clone();
     const fu = this.floor.material.uniforms;
     fu.uGridColor.value.set(...(e.gridColor || [0, 0, 0]));
     fu.uGridFixed.value = e.gridColor ? 1 : 0;
-    fu.uFadeFar.value = e.sky ? 140000 : e.fogFar * 1.2;
+    fu.uFadeFar.value = e.sky === true ? 140000 : e.fogFar * 1.2;
   }
 
   setFloorY(y) { this.floor.position.y = y; this.mountains.position.y = y; }
@@ -121,7 +124,7 @@ export class Renderer {
   _buildEnvironment() {
     // --- sky dome ---
     const skyMat = new THREE.ShaderMaterial({
-      uniforms: { uTime: { value: 0 }, uSun: { value: SUN_DIR } },
+      uniforms: { uTime: { value: 0 }, uSun: { value: SUN_DIR }, uMode: { value: 0 } },
       vertexShader: SKY_VS, fragmentShader: SKY_FS,
       side: THREE.BackSide, depthWrite: false, fog: false,
     });
@@ -134,7 +137,7 @@ export class Renderer {
     const floorMat = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 }, uFog: { value: FOG_COLOR }, uCam: { value: new THREE.Vector3() },
-        uGridColor: { value: new THREE.Color() }, uGridFixed: { value: 0 }, uFadeFar: { value: 140000 },
+        uGridColor: { value: new THREE.Color() }, uGridFixed: { value: 0 }, uFadeFar: { value: 140000 }, uSea: { value: 0 },
       },
       vertexShader: FLOOR_VS, fragmentShader: FLOOR_FS, fog: false,
       transparent: false,
@@ -286,6 +289,7 @@ void main() {
 const SKY_FS = /* glsl */`
 uniform float uTime;
 uniform vec3 uSun;
+uniform float uMode;
 varying vec3 vDir;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -334,6 +338,34 @@ void main() {
       col += vec3(0.8, 0.85, 1.0) * s * 1.6;
     }
   }
+  if (uMode > 0.5) {
+    // deep space: black, dense stars, nebula and a ringed planet
+    col = vec3(0.004, 0.003, 0.012);
+    vec2 uv2 = vec2(atan(d.z, d.x) * 220.0, asin(clamp(d.y, -1.0, 1.0)) * 220.0);
+    float r2 = hash(floor(uv2));
+    if (r2 > 0.975) {
+      float s2 = smoothstep(0.3, 0.0, length(fract(uv2) - 0.5)) * (0.5 + 0.5 * sin(uTime * 2.0 + r2 * 40.0));
+      col += mix(vec3(0.6, 0.7, 1.0), vec3(1.0, 0.8, 0.9), r2) * s2 * 1.4;
+    }
+    float neb = sin(d.x * 3.0 + d.y * 5.0) * sin(d.z * 4.0 - d.y * 2.0);
+    col += vec3(0.25, 0.04, 0.35) * smoothstep(0.2, 1.0, neb) * 0.5 + vec3(0.0, 0.1, 0.2) * smoothstep(0.3, 1.0, -neb) * 0.4;
+    vec3 pc = normalize(vec3(0.5, 0.25, -0.8));
+    float pa = acos(clamp(dot(d, pc), -1.0, 1.0));
+    float PR = 0.22;
+    if (pa < PR) {
+      float lit = clamp(dot(normalize(d - pc * 0.9), normalize(vec3(-1.0, 0.6, 0.2))) * 0.5 + 0.5, 0.0, 1.0);
+      float bands = 0.5 + 0.5 * sin((d.y - pc.y) * 90.0);
+      col = mix(vec3(0.05, 0.02, 0.12), mix(vec3(0.5, 0.15, 0.6), vec3(1.0, 0.45, 0.6), bands), lit) * smoothstep(PR, PR - 0.004, pa);
+    }
+    // ring
+    vec3 rn = normalize(vec3(0.15, 1.0, 0.2));
+    vec3 toP = d - pc;
+    float ry = dot(toP, rn);
+    float rr = length(toP - rn * ry);
+    if (abs(ry) < 0.006 && rr > 0.27 && rr < 0.42 && !(pa < PR && dot(toP, normalize(vec3(0.0, 0.0, 1.0))) > 0.0)) {
+      col = mix(col, vec3(0.9, 0.7, 1.0) * (0.6 + 0.4 * sin(rr * 160.0)), 0.8);
+    }
+  }
   gl_FragColor = vec4(col, 1.0);
 }`;
 
@@ -352,6 +384,7 @@ uniform vec3 uCam;
 uniform vec3 uGridColor;
 uniform float uGridFixed;
 uniform float uFadeFar;
+uniform float uSea;
 varying vec3 vWorld;
 float gridLine(vec2 p, float w) {
   vec2 g = abs(fract(p - 0.5) - 0.5) / fwidth(p);
@@ -367,6 +400,15 @@ void main() {
   vec3 lc = mix(vec3(1.0, 0.15, 0.8), vec3(0.0, 0.9, 1.0), 0.5 + 0.5 * sin(vWorld.x * 0.00002 + uTime * 0.2));
   lc = mix(lc, uGridColor, uGridFixed);
   vec3 col = base + lc * (l * 0.55 + big * 1.1) * fade;
+  if (uSea > 0.5) {
+    // synthwave ocean: deep teal with shimmering sun-glint lines
+    float wave = sin(vWorld.x * 0.0011 + uTime * 1.3) * sin(vWorld.z * 0.0008 - uTime * 0.9);
+    float glint = smoothstep(0.85, 1.0, sin(vWorld.z * 0.004 + wave * 3.0 + uTime));
+    float toward = smoothstep(9000.0, 0.0, abs(vWorld.x - uCam.x)) ;
+    col = vec3(0.01, 0.06, 0.09) + vec3(0.0, 0.25, 0.3) * (0.5 + 0.5 * wave) * fade * 0.4;
+    col += vec3(1.0, 0.45, 0.6) * glint * toward * 0.8;
+    col += lc * l * 0.12 * fade;
+  }
   // horizon haze
   col = mix(col, uFog * 1.2, smoothstep(uFadeFar * 0.2, uFadeFar * 1.4, dist));
   gl_FragColor = vec4(col, 1.0);

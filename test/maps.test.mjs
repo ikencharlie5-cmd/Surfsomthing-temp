@@ -37,3 +37,15 @@ for (const map of MAPS) {
     });
   });
 }
+
+test('unlock chain: every locked map can eventually be unlocked', async () => {
+  const { isUnlocked } = await import('../src/maps/index.js');
+  const done = new Set();
+  let progress = true;
+  while (progress) {
+    progress = false;
+    for (const m of MAPS) if (!done.has(m.id) && isUnlocked(m, (id) => done.has(id))) { done.add(m.id); progress = true; }
+  }
+  assert.equal(done.size, MAPS.length, `unreachable: ${MAPS.filter((m) => !done.has(m.id)).map((m) => m.id)}`);
+  assert.ok(!isUnlocked(MAPS.find((m) => m.id === 'final-overdrive'), () => false), 'finale starts locked');
+});
