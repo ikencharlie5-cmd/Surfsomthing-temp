@@ -98,7 +98,7 @@ export class Renderer {
     this.scene.fog.near = e.fogNear;
     this.scene.fog.far = e.fogFar;
     this.sky.visible = !!e.sky;
-    this.sky.material.uniforms.uMode.value = e.sky === 'space' ? 1 : 0;
+    this.sky.material.uniforms.uMode.value = e.sky === 'space' ? 1 : e.sky === 'desert' ? 2 : 0;
     this.floor.visible = e.floor;
     this.floor.material.uniforms.uSea.value = e.floorMode === 'sea' ? 1 : 0;
     this.mountains.visible = e.mountains;
@@ -338,7 +338,28 @@ void main() {
       col += vec3(0.8, 0.85, 1.0) * s * 1.6;
     }
   }
-  if (uMode > 0.5) {
+  if (uMode > 1.5) {
+    // desert night: deep blue, a huge moon and a sky full of stars
+    col = mix(vec3(0.12, 0.06, 0.2), vec3(0.01, 0.02, 0.07), smoothstep(-0.02, 0.5, h));
+    if (h < 0.0) col = vec3(0.05, 0.03, 0.08);
+    vec2 uv3 = vec2(atan(d.z, d.x) * 260.0, h * 340.0);
+    float r3 = hash(floor(uv3));
+    if (h > 0.02 && r3 > 0.965) {
+      float tw = 0.55 + 0.45 * sin(uTime * (1.5 + r3 * 3.0) + r3 * 70.0);
+      col += vec3(0.85, 0.9, 1.0) * smoothstep(0.3, 0.0, length(fract(uv3) - 0.5)) * tw * 1.5 * smoothstep(0.02, 0.2, h);
+    }
+    float band = exp(-pow(dot(d, normalize(vec3(0.6, 0.3, 0.75))) * 5.0, 2.0));
+    col += vec3(0.25, 0.18, 0.4) * band * 0.35 * smoothstep(0.0, 0.3, h);
+    vec3 mc = normalize(vec3(-0.35, 0.32, -0.88));
+    float ma = acos(clamp(dot(d, mc), -1.0, 1.0));
+    float MR = 0.11;
+    col += vec3(0.6, 0.65, 0.9) * pow(max(dot(d, mc), 0.0), 120.0) * 0.6;
+    if (ma < MR) {
+      vec3 q = (d - mc) / MR;
+      float crater = smoothstep(0.55, 0.75, fract(sin(dot(floor(q.xy * 6.0), vec2(12.9, 78.2))) * 43758.5));
+      col = mix(vec3(0.95, 0.93, 0.85), vec3(0.7, 0.7, 0.75), crater * 0.6) * smoothstep(MR, MR - 0.003, ma);
+    }
+  } else if (uMode > 0.5) {
     // deep space: black, dense stars, nebula and a ringed planet
     col = vec3(0.004, 0.003, 0.012);
     vec2 uv2 = vec2(atan(d.z, d.x) * 220.0, asin(clamp(d.y, -1.0, 1.0)) * 220.0);

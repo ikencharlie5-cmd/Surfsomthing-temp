@@ -8,8 +8,9 @@ const LILAC = [0.75, 0.55, 1.0];
 export default function build() {
   const b = new MapBuilder('vapor-coast', 'Vapor Coast', {
     difficulty: 'easy',
-    description: 'Wide pastel ramps over a glittering sunset ocean. Pure flow.',
-    env: { floorMode: 'sea', fogColor: [0.5, 0.18, 0.38], fogNear: 9000, fogFar: 60000 },
+    description: 'A neo beach at sunset: neon palms, a boardwalk and a pier over a glittering ocean.',
+    env: { floorMode: 'sea', mountains: false, fogColor: [0.5, 0.18, 0.38], fogNear: 12000, fogFar: 70000 },
+    theme: { type: 'beach', seed: 21 },
     unlock: { after: ['night-tunnel'] },
   });
   addCourse(b, {
@@ -25,5 +26,10 @@ export default function build() {
       .straight(1500, 150).wave(6000, 600, 260, 1)
       .gap(900, 0, { color: TEAL }).straight(4000, 400),
   });
+  // the sea sits just below the land at the finish, so the coast ends on a beach
+  const last = b.map.line[b.map.line.length - 1];
+  const seaY = last.p[1] - last.height - 1900 - 150;
+  b.map.theme.seaY = seaY;
+  b.map.env.floorAbs = seaY;
   return b.build();
 }

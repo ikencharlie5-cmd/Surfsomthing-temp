@@ -42,6 +42,7 @@ export function buildBrushMesh(brushes) {
   const pos = [], nrm = [], col = [], kind = [];
   const linePos = [], lineCol = [];
   for (const br of brushes) {
+    if (br.meta.hidden) continue; // invisible collision shell (themed maps draw their own rock)
     const c = br.meta.color || [1, 0.2, 0.8];
     const k = KIND[br.meta.kind] ?? 0;
     const edgeScale = br.meta.edge ?? 1;
@@ -89,6 +90,19 @@ export function buildBrushMesh(brushes) {
     group.add(ls);
   }
   return group;
+}
+
+/** Glowing line segments (flat arrays of positions and colours). */
+export function neonLines(pos, col, width = 2.2) {
+  const g = new LineSegmentsGeometry();
+  g.setPositions(pos);
+  g.setColors(col);
+  const m = new LineMaterial({ vertexColors: true, linewidth: width, worldUnits: false, fog: true });
+  lineMats.add(m);
+  m.addEventListener('dispose', () => lineMats.delete(m));
+  const ls = new LineSegments2(g, m);
+  ls.frustumCulled = false;
+  return ls;
 }
 
 /** Glowing ribs (tunnel frames) from map.ribs. */

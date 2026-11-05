@@ -66,12 +66,12 @@ Start with **First Wave**, the tutorial map. It shows hints at each stage.
   | First Wave | tutorial | open sky, with hints | open |
   | Neon Drift | easy | open sky, 1 fast line | open |
   | Night Tunnel | medium | fully enclosed ribbed tunnel | open |
-  | Canyon Run | medium | tall canyon walls, red sky | open |
+  | Canyon Run | medium | real rock canyon at night: strata walls, arches, mesas, neon cacti, tumbleweeds, huge moon | open |
   | Overclock | hard | open sky, thin ramps, 2 fast lines | open |
   | Data Core | hard | tight enclosed shaft | open |
   | Skyline Rush | medium | neon city, lit towers | finish Neon Drift |
-  | Vapor Coast | easy | pastel sunset over an ocean | finish Night Tunnel |
-  | Crystal Cave | medium | enclosed ice cave, glowing crystals | finish Canyon Run |
+  | Vapor Coast | easy | neo beach: coastal cliffs down to a beach, neon palms, boardwalk, pier, retro props, sunset ocean | finish Night Tunnel |
+  | Crystal Cave | medium | natural rock cave: stalactites, crystal clusters, underground river | finish Canyon Run |
   | Orbital | hard | space station + open space, lower gravity | finish Overclock |
   | Final Overdrive | expert | everything: open, canyon, tunnel, 3 fast lines | finish Data Core, Orbital and Crystal Cave |
 - **Fast lines:** at some gaps, a long jump straight ahead lands directly on a
@@ -163,6 +163,12 @@ Rules of thumb the bot tests taught us:
 - Land on a short straight before a curve.
 - Add a gentle run-out after steep ramps.
 - Widen turns for fast sections. A radius of about v²/650 is comfortable.
+
+Themed scenery (`theme: { type: 'beach' | 'canyon' | 'cave' }`) is generated
+procedurally around the course in `src/render/scenery.js`: low-poly rock and
+terrain plus props. It is decoration only. On these maps you collide with a
+smooth hidden shell set just inside the rough rock, so bumps never scrub
+speed, and prop density follows the graphics quality.
 
 Scenery helpers: `addCity(map)` places solid lit towers that stay clear of the
 line, and `addCrystals(map)` grows decorative crystals inside enclosures.

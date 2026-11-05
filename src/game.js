@@ -6,6 +6,7 @@ import { Movement, Player, HULL, EYE_OFFSET } from './physics/movement.js';
 import { V3 } from './physics/vec.js';
 import { buildBrushMesh, buildGate, buildZoneBox, buildRibs, buildCheckpointMarker, buildDecor, faceMaterial } from './render/worldMesh.js';
 import { disposeTree } from './render/renderer.js';
+import { buildTheme } from './render/scenery.js';
 import { EndlessTrack } from './maps/endless.js';
 import { SurfBot } from './sim/bot.js';
 import * as store from './storage.js';
@@ -75,11 +76,15 @@ export class Game {
     this.root.add(buildBrushMesh(brushes));
     if (map.ribs?.length) this.root.add(buildRibs(map.ribs));
     if (map.decor?.length) this.root.add(buildDecor(map.decor));
+    if (map.theme) {
+      const theme = buildTheme(map, this.r.quality);
+      if (theme) { this.root.add(theme); this.animated.push(theme); }
+    }
     Object.assign(this.mv.cv, map.cvars || {});
     let minY = 0;
     for (const b of brushes) minY = Math.min(minY, b.min.y);
     this.mapMinY = minY;
-    this.r.setFloorY(minY - 9000);
+    this.r.setFloorY(this.env.floorAbs ?? minY - 9000);
     for (const t of map.triggers) {
       const trig = new Trigger(t.min, t.max, t);
       this.triggers.push(trig);

@@ -34,6 +34,7 @@ export class MapBuilder {
       cvars: opts.cvars || null, // physics overrides, e.g. { gravity: 620 }
       unlock: opts.unlock || null, // { after: [mapIds] } must all be finished
       decor: [],
+      theme: opts.theme || null, // procedural scenery: { type: 'beach'|'canyon'|'cave', ... }
       killY: opts.killY ?? -5000,
     };
   }
@@ -384,15 +385,16 @@ function addEnclosure(m, line) {
           pts.push(pt(s, side * lat, s.yb), pt(s, side * lat, s.yt + (t.ceiling ? thick : 0)));
         }
       }
-      m.brushes.push({ points: pts, kind: 'wall', color, edge: 0.45 });
+      m.brushes.push({ points: pts, kind: 'wall', color, edge: 0.45, hidden: !!t.hidden });
     }
     if (t.ceiling) {
       const pts = [];
       for (const s of [a, b]) {
         for (const lat of [-(s.L + thick), s.L + thick]) pts.push(pt(s, lat, s.yt), pt(s, lat, s.yt + thick));
       }
-      m.brushes.push({ points: pts, kind: 'wall', color, edge: 0.45 });
+      m.brushes.push({ points: pts, kind: 'wall', color, edge: 0.45, hidden: !!t.hidden });
     }
+    if (t.hidden) continue; // themed scenery replaces ribs
     // ribs: glowing frames along the enclosure
     const len = Math.hypot(b.p[0] - a.p[0], b.p[2] - a.p[2]);
     const n = Math.max(1, Math.round(len / (t.ribSpacing ?? 900)));
