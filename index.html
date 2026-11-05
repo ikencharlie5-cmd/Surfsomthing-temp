@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Slipstream: Neon Surf</title>
+  <meta name="description" content="Slipstream: a neon synthwave surf game in your browser. Air-strafe, ride ramps, chase your ghost." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%2300f0ff'/%3E%3Cstop offset='1' stop-color='%23ff2bd6'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M4 50 L32 10 L60 50 Z' fill='none' stroke='url(%23g)' stroke-width='6'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&display=swap" />
+  <link rel="stylesheet" href="style.css" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three/build/three.module.js",
+        "three/addons/": "./vendor/three/addons/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <canvas id="view"></canvas>
+  <div id="vignette"></div>
+
+  <!-- ===== HUD ===== -->
+  <div id="hud" class="hidden">
+    <div id="hud-top">
+      <div id="hud-map"></div>
+      <div id="hud-timer">00:00.000</div>
+      <div id="hud-sub"><span id="hud-stage"></span><span id="hud-pb"></span></div>
+      <div id="hud-split" class="hidden"></div>
+    </div>
+    <div id="hud-hint" class="hidden"></div>
+    <div id="hud-center-msg" class="hidden"></div>
+    <div id="crosshair"></div>
+    <div id="hud-bottom">
+      <div id="hud-speed">0</div>
+      <div id="hud-speed-label">u/s</div>
+      <div id="hud-speedbar"><div id="hud-speedbar-fill"></div></div>
+      <div id="hud-sync">SYNC <span id="hud-sync-val">--</span></div>
+    </div>
+    <div id="hud-keys">
+      <div class="k" data-k="forward">W</div>
+      <div class="row"><div class="k" data-k="left">A</div><div class="k" data-k="back">S</div><div class="k" data-k="right">D</div></div>
+      <div class="k wide" data-k="jump">JUMP</div>
+    </div>
+    <div id="hud-help">R restart · T stage · G ghost · Esc menu</div>
+  </div>
+
+  <!-- ===== Main menu ===== -->
+  <div id="menu" class="screen">
+    <div class="menu-inner">
+      <h1 class="logo">SLIP<span>STREAM</span></h1>
+      <div class="tagline">neon surf</div>
+      <nav class="menu-buttons">
+        <button data-action="maps" class="primary">Play</button>
+        <button data-action="endless">Endless</button>
+        <button data-action="leaderboards">Records</button>
+        <button data-action="settings">Settings</button>
+        <button data-action="howto">How to surf</button>
+      </nav>
+      <div class="menu-foot">Best with a mouse · Click to capture the cursor · Esc to release</div>
+    </div>
+  </div>
+
+  <!-- ===== Map select ===== -->
+  <div id="maps" class="screen hidden">
+    <div class="panel wide">
+      <h2>Choose a map</h2>
+      <div id="map-list" class="cards"></div>
+      <div class="panel-foot"><button data-action="back">Back</button></div>
+    </div>
+  </div>
+
+  <!-- ===== Endless ===== -->
+  <div id="endless" class="screen hidden">
+    <div class="panel">
+      <h2>Endless</h2>
+      <p class="muted">A procedurally generated course that never ends and gets harder the further you go. Fall and it's over.</p>
+      <div class="endless-best" id="endless-best"></div>
+      <label class="field">Seed <input id="endless-seed" type="text" maxlength="24" spellcheck="false" /></label>
+      <div class="row-buttons">
+        <button data-action="endless-random">Random seed</button>
+        <button data-action="endless-daily">Daily seed</button>
+      </div>
+      <div class="panel-foot">
+        <button data-action="back">Back</button>
+        <button data-action="endless-go" class="primary">Start</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Leaderboards ===== -->
+  <div id="leaderboards" class="screen hidden">
+    <div class="panel wide">
+      <h2>Records</h2>
+      <div class="tabs" id="lb-tabs"></div>
+      <div id="lb-body"></div>
+      <div class="panel-foot">
+        <button data-action="lb-clear" class="danger">Clear this board</button>
+        <button data-action="back">Back</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Settings ===== -->
+  <div id="settings" class="screen hidden">
+    <div class="panel wide">
+      <h2>Settings</h2>
+      <div class="settings-grid">
+        <section>
+          <h3>Mouse &amp; view</h3>
+          <label class="slider">Sensitivity <input type="range" id="set-sens" min="0.1" max="10" step="0.05" /><output></output></label>
+          <label class="slider">FOV (CS-style, horizontal at 4:3) <input type="range" id="set-fov" min="70" max="120" step="1" /><output></output></label>
+          <label class="check"><input type="checkbox" id="set-invert" /> Invert mouse Y</label>
+          <label class="check"><input type="checkbox" id="set-raw" /> Raw mouse input (if supported)</label>
+          <label class="check"><input type="checkbox" id="set-speedfov" /> Widen FOV at high speed</label>
+        </section>
+        <section>
+          <h3>Graphics</h3>
+          <label class="select">Quality
+            <select id="set-quality">
+              <option value="low">Low: fastest, no bloom</option>
+              <option value="medium">Medium: half-res bloom</option>
+              <option value="high">High: full bloom</option>
+              <option value="ultra">Ultra: full bloom, max resolution</option>
+            </select>
+          </label>
+          <label class="slider">Render scale <input type="range" id="set-scale" min="0.5" max="1" step="0.05" /><output></output></label>
+          <label class="check"><input type="checkbox" id="set-particles" /> Speed particles</label>
+          <label class="check"><input type="checkbox" id="set-fps" /> Show FPS</label>
+        </section>
+        <section>
+          <h3>Gameplay</h3>
+          <label class="check"><input type="checkbox" id="set-ghost" /> Show personal-best ghost</label>
+          <label class="check"><input type="checkbox" id="set-autobhop" /> Auto-bhop (hold jump)</label>
+          <label class="check"><input type="checkbox" id="set-keys" /> Show key display</label>
+          <label class="check"><input type="checkbox" id="set-hints" /> Show tutorial hints</label>
+          <label class="slider">Air accelerate <input type="range" id="set-aa" min="10" max="1000" step="10" /><output></output></label>
+        </section>
+        <section>
+          <h3>Audio</h3>
+          <label class="slider">Master <input type="range" id="set-vol" min="0" max="1" step="0.01" /><output></output></label>
+          <label class="slider">Music <input type="range" id="set-music" min="0" max="1" step="0.01" /><output></output></label>
+          <label class="slider">Effects <input type="range" id="set-sfx" min="0" max="1" step="0.01" /><output></output></label>
+        </section>
+        <section class="span2">
+          <h3>Keys <span class="muted small">(click, then press a key)</span></h3>
+          <div id="keybinds" class="keybinds"></div>
+        </section>
+      </div>
+      <div class="panel-foot">
+        <button data-action="settings-reset" class="danger">Reset to defaults</button>
+        <button data-action="back" class="primary">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== How to ===== -->
+  <div id="howto" class="screen hidden">
+    <div class="panel">
+      <h2>How to surf</h2>
+      <ol class="howto">
+        <li><b>Don't hold W on a ramp.</b> Surfing is all strafe keys (A/D) and mouse.</li>
+        <li><b>Hold the key toward the ramp.</b> If the ramp is on your right, hold <kbd>D</kbd>. That stops you sliding off the bottom.</li>
+        <li><b>Too high? Let go a bit.</b> Holding the key too long climbs you over the top. Tap it to stay in the middle of the ramp.</li>
+        <li><b>Follow the ramp with your mouse.</b> On curves, turn smoothly so you keep looking along the ramp.</li>
+        <li><b>Air strafe to steer.</b> In the air, hold <kbd>A</kbd> + move mouse left, or <kbd>D</kbd> + move mouse right. Match key and mouse direction (that's your <i>sync</i>).</li>
+        <li><b>Fell?</b> You go back to the start of the stage. The clock keeps running, so try again!</li>
+      </ol>
+      <p class="muted">Start with the <b>First Wave</b> tutorial map. It shows hints as you go.</p>
+      <div class="panel-foot"><button data-action="back" class="primary">Got it</button></div>
+    </div>
+  </div>
+
+  <!-- ===== Pause ===== -->
+  <div id="pause" class="screen hidden">
+    <div class="panel small">
+      <h2>Paused</h2>
+      <nav class="menu-buttons">
+        <button data-action="resume" class="primary">Resume</button>
+        <button data-action="restart">Restart run</button>
+        <button data-action="settings">Settings</button>
+        <button data-action="quit">Quit to menu</button>
+      </nav>
+    </div>
+  </div>
+
+  <!-- ===== Finish ===== -->
+  <div id="finish" class="screen hidden">
+    <div class="panel">
+      <h2 id="finish-title">Finished!</h2>
+      <div id="finish-time" class="big-time"></div>
+      <div id="finish-detail" class="muted center"></div>
+      <div id="finish-splits"></div>
+      <div class="panel-foot">
+        <button data-action="quit">Menu</button>
+        <button data-action="next" id="finish-next">Next map</button>
+        <button data-action="retry" class="primary">Retry</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Click to play ===== -->
+  <div id="clicktoplay" class="screen hidden">
+    <div class="ctp">Click to play</div>
+  </div>
+
+  <div id="fps" class="hidden"></div>
+  <div id="loading" class="screen"><div class="ctp">Loading…</div></div>
+  <noscript><div class="screen"><div class="ctp">Slipstream needs JavaScript.</div></div></noscript>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

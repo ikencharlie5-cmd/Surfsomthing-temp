@@ -1,0 +1,11 @@
+{
+  "name": "slipstream",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Slipstream - a neon surf game for the browser",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "start": "npx --yes http-server -c-1 -p 8080 ."
+  }
+}
