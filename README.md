@@ -71,7 +71,7 @@ Start with **First Wave**, the tutorial map. It shows hints at each stage.
   | City | Neon Drift (wave ramps) | Skyline Rush (boost rings) | Rooftop Run (rooftop jumps) | Downtown Blitz (duck & dodge) | Megacity (megatower atriums) |
   | Space Station | Docking Bay (hangar) | Overclock (big boosts) | Orbital (orbit spiral) | Zero-G (very low gravity) | Event Horizon (gravity well spiral) |
   | Server Farm | Night Tunnel (duck & dodge) | Packet Storm (boost rings) | Data Core (core vault) | Firewall (firewall slots) | Kernel Panic (chaos) |
-  | Jungle | Canopy Glide (canopy waves) | **Lost Temple (temple run)** | Serpent River (serpent slalom) | Jaguar Ruins (ruin dodge) | Green Hell (overgrown ruin) |
+  | Jungle | Canopy Glide (canopy waves) | **Lost Temple (temple complex, hand-built)** | Serpent River (serpent slalom) | Jaguar Ruins (ruin dodge) | Green Hell (overgrown ruin) |
   | Volcano | Ash Fields (ash waves) | Obsidian Slopes (spike dodge) | Magma Run (lava tube) | Pyroclast (eruption jumps) | Caldera (plunges) |
   | Warp | Warp Lane (boost rings) | Hyperdrive (hyper boosts) | Lightspeed (boost jumps) | Final Overdrive (warp gate) | Singularity (death spiral) |
   | Castle | Gatehouse (gates) | Battlements (merlon dodge) | Moonlit Keep (great hall) | Dragon Spire (spire jumps) | Siege (full siege) |
@@ -83,6 +83,19 @@ Start with **First Wave**, the tutorial map. It shows hints at each stage.
   the ramp curls up into a lip and launches you up to ~700 units into a
   2500-3100 unit jump. Most kickers have a **double needle**: two walls
   inside the jump, each with a slot you have to fly through.
+
+  **Lost Temple** is a hand-designed set-piece map (`src/maps/lost-temple.js`).
+  You drop off a stone tower and circle a colossal stepped pyramid on the
+  inside face, so it fills your view. A kicker at its foot launches you into
+  the entrance tunnel (duck & dodge). Underground you circle the Hall of
+  Pillars, then a flooded chamber, then spiral one and a half turns down the
+  great hall around a giant idol. Riding through it takes about two minutes.
+
+  **Kickers on every map:** easy 1, medium/hard 2, expert/insane 3,
+  extreme 6. Harder tiers use more double needles.
+
+  **The finish is a ring:** you have to fly through the gate. Miss it and you
+  fall and restart.
 
   Twist mechanics:
   - **Set pieces:** the course runs straight through a building, such as a

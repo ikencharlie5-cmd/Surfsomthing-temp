@@ -246,6 +246,7 @@ export function buildTheme(map, quality = 'high') {
   if (t.type === 'volcano') return buildVolcano(map, t, density);
   if (t.type === 'vortex') return buildVortex(map, t, density);
   if (t.type === 'castle') return buildCastle(map, t, density);
+  if (t.type === 'temple-complex') return buildTempleComplex(map, t, density);
   return null;
 }
 
@@ -2008,4 +2009,241 @@ export function buildSetPieces(map, quality = 'high') {
     ringMats.forEach((m, i) => { m.rotation.z = time * 2 + i; m.scale.setScalar(1 + Math.sin(time * 5 + i) * 0.05); });
   };
   return group;
+}
+
+// ----------------------------------------------------------------- temple complex (Lost Temple)
+
+const T_STONE = [0.3, 0.33, 0.26];
+const T_STONE2 = [0.24, 0.27, 0.21];
+const T_GLOW = [0.25, 1.0, 0.55];
+const T_GOLD = [1.0, 0.7, 0.25];
+
+function buildTempleComplex(map, t, density) {
+  const group = new THREE.Group();
+  const geo = new Geo();
+  const lights = new Lights();
+  const rng = rand(t.seed || 7102);
+  const T = map.temple;
+  const line = map.line;
+  // dense samples of the ride (a bit below the ridge, where riders are)
+  const samples = [];
+  for (let i = 0; i < line.length - 1; i++) {
+    const a = line[i].p, b = line[i + 1].p;
+    const n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[2] - a[2]) / 400));
+    for (let k = 0; k < n; k++) {
+      const u = k / n;
+      samples.push([a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u - line[i].height * 0.4, a[2] + (b[2] - a[2]) * u]);
+    }
+  }
+  /** Is a surface tile at p in the way of the ride? (cut a hole there) */
+  const blocked = (p, r = 2400, vy = r) => samples.some((s) => Math.abs(s[1] - p[1]) < vy && (s[0] - p[0]) ** 2 + (s[2] - p[2]) ** 2 < r * r);
+  const pc = T.pyramid.center;
+
+  // --- jungle floor (with a hole where the ride dives underground)
+  const G = T.ground;
+  const RG = 42000, NA = 72, NR = 22;
+  const rad = (k) => 1500 + (RG - 1500) * Math.pow(k / NR, 1.4);
+  for (let k = 0; k < NR; k++) for (let j = 0; j < NA; j++) {
+    const a0 = (j / NA) * Math.PI * 2, a1 = ((j + 1) / NA) * Math.PI * 2;
+    const r0 = rad(k), r1 = rad(k + 1);
+    const P = (r, a) => { const x = pc[0] + Math.cos(a) * r, z = pc[1] + Math.sin(a) * r; return [x, G + (r > 20000 ? (fbm3(x / 4000, 0, z / 4000, 2) - 0.3) * 3000 * ((r - 20000) / 22000) : 0), z]; };
+    const c = P((r0 + r1) / 2, (a0 + a1) / 2);
+    if (blocked(c, 2600)) continue;
+    const col = mix([0.03, 0.1, 0.05], [0.06, 0.15, 0.07], fbm3(c[0] / 2500, 0, c[2] / 2500));
+    geo.quad(P(r0, a0), P(r1, a0), P(r1, a1), P(r0, a1), col);
+  }
+
+  // --- the pyramid: stepped tiers, four grand stairways, a summit shrine
+  const tiers = 11, base = 8200, topHalf = 1400;
+  const H = T.pyramid.top - G;
+  for (let k = 0; k < tiers; k++) {
+    const y0 = G + (H * k) / tiers, y1 = G + (H * (k + 1)) / tiers;
+    const half = base + (topHalf - base) * (k / tiers);
+    geo.box([pc[0], (y0 + y1) / 2, pc[1]], [half * 2, y1 - y0, half * 2], 0, k % 2 ? T_STONE : T_STONE2);
+    // glowing glyph band on each tier
+    const e = half + 6, y = y0 + (y1 - y0) * 0.55;
+    const corners = [[-e, -e], [e, -e], [e, e], [-e, e]].map(([x, z]) => [pc[0] + x, y, pc[1] + z]);
+    for (let q = 0; q < 4; q++) geo.line(corners[q], corners[(q + 1) % 4], k % 3 === 0 ? scale(T_GOLD, 1.6) : scale(T_GLOW, 0.9));
+    // braziers on the tier corners
+    if (k % 2 === 0) for (const c of corners) lights.dot(add(c, [0, (y1 - y0) * 0.6, 0]), [1.0, 0.55, 0.15], 140, 6 + rng() * 4, rng());
+  }
+  // stairways up the middle of each face
+  for (let s = 0; s < 4; s++) {
+    const dir = [[1, 0], [0, 1], [-1, 0], [0, -1]][s];
+    for (let k = 0; k < tiers * 3; k++) {
+      const u = k / (tiers * 3);
+      const half = base + (topHalf - base) * u;
+      const y = G + H * u;
+      geo.box([pc[0] + dir[0] * (half + 150), y + H / (tiers * 6), pc[1] + dir[1] * (half + 150)], [dir[0] ? 300 : 1400, H / (tiers * 3), dir[1] ? 300 : 1400], 0, [0.36, 0.38, 0.3]);
+    }
+  }
+  // summit shrine with an eternal flame
+  const sTop = T.pyramid.top;
+  geo.box([pc[0], sTop + 600, pc[1]], [2000, 1200, 2000], 0, T_STONE);
+  geo.box([pc[0], sTop + 1300, pc[1]], [2400, 200, 2400], 0, T_STONE2);
+  for (const [x, z] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) geo.cyl([pc[0] + x * 1000, sTop + 1400, pc[1] + z * 1000], [pc[0] + x * 1000, sTop + 2400, pc[1] + z * 1000], 120, 110, 8, T_STONE);
+  geo.box([pc[0], sTop + 2500, pc[1]], [2400, 200, 2400], 0, T_STONE2);
+  for (let k = 0; k < 40; k++) lights.flow([pc[0] + (rng() - 0.5) * 600, sTop + 1500, pc[1] + (rng() - 0.5) * 600], [pc[0] + (rng() - 0.5) * 900, sTop + 2300 + rng() * 1500, pc[1] + (rng() - 0.5) * 900], [1, 0.5 + rng() * 0.3, 0.1], 110, 0.6 + rng(), rng());
+  lights.dot([pc[0], sTop + 1700, pc[1]], [1, 0.6, 0.2], 600, 0, 0);
+
+  // --- the stone tower you start on
+  const sp = map.spawn.pos;
+  for (let k = 0; k < 6; k++) {
+    const y1 = sp[1] - 60 - k * ((sp[1] - G) / 6), y0 = y1 - (sp[1] - G) / 6;
+    const half = 360 + k * 140;
+    geo.box([sp[0], (y0 + y1) / 2, sp[2]], [half * 2, y1 - y0, half * 2], 0, k % 2 ? T_STONE : T_STONE2);
+    if (k < 5) lights.dot([sp[0] + half + 20, y1 - 150, sp[2]], [1, 0.55, 0.15], 110, 7, rng());
+  }
+
+  // --- jungle around the pyramid
+  for (let i = 0; i < Math.round(160 * density); i++) {
+    const a = rng() * Math.PI * 2, r = T.pyramid.ringR + 2500 + rng() * 24000;
+    const x = pc[0] + Math.cos(a) * r, z = pc[1] + Math.sin(a) * r;
+    const h = 1600 + rng() * 2400;
+    if (blocked([x, G + h * 0.6, z], 1800) || blocked([x, G + 300, z], 1800)) continue;
+    jungleTree(geo, lights, [x, G - 20, z], h, 500 + rng() * 600, rng);
+  }
+  for (let i = 0; i < Math.round(300 * density); i++) {
+    const a = rng() * Math.PI * 2, r = 9000 + rng() * 20000;
+    const p = [pc[0] + Math.cos(a) * r, G, pc[1] + Math.sin(a) * r];
+    if (blocked(p, 1500)) continue;
+    if (rng() < 0.6) fern(geo, p, 200 + rng() * 250, rng); else mushroom(geo, p, 60 + rng() * 120, rng);
+  }
+
+  // --- the chambers under the temple
+  const water = [];
+  for (const R of T.rooms) chamber(geo, lights, R, blocked, rng, density, water);
+
+  const mat = propMaterial({ dir: [-0.35, 0.32, -0.88], color: [0.35, 0.42, 0.55], ambient: [0.26, 0.27, 0.22], lamp: 1.1, lampColor: [1.0, 0.7, 0.4] });
+  finish(group, geo, mat);
+  finishLights(group, lights);
+  for (const w of water) { group.add(w); group.userData.mats.push(w.material); }
+  return group;
+}
+
+function chamber(geo, lights, R, blocked, rng, density, water) {
+  const c = R.center, NA = 64;
+  const ang = (j) => (j / NA) * Math.PI * 2;
+  const at2 = (r, a, y) => [c[0] + Math.cos(a) * r, y, c[1] + Math.sin(a) * r];
+  const Hh = R.top - R.bottom;
+  const NV = Math.max(4, Math.round(Hh / 1200));
+  const inner = R.kind === 'idol' ? R.radius - 3600 : 0;
+  // walls (holes where the ride enters and leaves)
+  for (let j = 0; j < NA; j++) for (let v = 0; v < NV; v++) {
+    const a0 = ang(j), a1 = ang(j + 1), y0 = R.bottom + (Hh * v) / NV, y1 = R.bottom + (Hh * (v + 1)) / NV;
+    if (blocked(at2(R.wallR, (a0 + a1) / 2, (y0 + y1) / 2), 2600)) continue;
+    const col = mix(T_STONE2, T_STONE, ((j + v) % 3) / 3) ;
+    geo.quad(at2(R.wallR, a0, y0), at2(R.wallR, a1, y0), at2(R.wallR, a1, y1), at2(R.wallR, a0, y1), col);
+  }
+  // ceiling and floor rings
+  const NR = 6;
+  for (const [y, col] of [[R.top, T_STONE2], [R.bottom, [0.2, 0.22, 0.17]]]) {
+    for (let k = 0; k < NR; k++) for (let j = 0; j < NA; j++) {
+      const r0 = inner + ((R.wallR - inner) * k) / NR, r1 = inner + ((R.wallR - inner) * (k + 1)) / NR;
+      const a0 = ang(j), a1 = ang(j + 1);
+      // only cut ceilings/floors where the ride actually passes through them
+      if (blocked(at2((r0 + r1) / 2, (a0 + a1) / 2, y), 2600, 700)) continue;
+      geo.quad(at2(r0, a0, y), at2(r1, a0, y), at2(r1, a1, y), at2(r0, a1, y), col);
+    }
+  }
+  // glowing rune bands and torches around the walls
+  for (let v = 1; v < NV; v++) {
+    const y = R.bottom + (Hh * v) / NV;
+    for (let j = 0; j < NA; j++) {
+      const p0 = at2(R.wallR - 10, ang(j), y), p1 = at2(R.wallR - 10, ang(j + 1), y);
+      if (blocked(p0, 2600)) continue;
+      geo.line(p0, p1, v % 2 ? scale(T_GLOW, 0.8) : scale(T_GOLD, 1.2));
+      if (j % 4 === 0 && v === Math.floor(NV / 2)) lights.dot(at2(R.wallR - 80, ang(j), y + 250), [1, 0.55, 0.15], 160, 6 + rng() * 4, rng());
+    }
+  }
+  if (R.kind === 'pillars') {
+    // two rings of colossal columns, inside and outside the ride
+    for (const rr of [R.radius - 2300, R.radius + 2300]) {
+      for (let j = 0; j < 16; j++) {
+        const a = (j / 16) * Math.PI * 2 + (rr > R.radius ? 0.1 : 0);
+        const b0 = at2(rr, a, R.bottom), b1 = at2(rr, a, R.top);
+        if (blocked(at2(rr, a, (R.bottom + R.top) / 2), 1500)) continue;
+        geo.cyl(b0, b1, 420, 380, 10, T_STONE);
+        geo.box(add(b1, [0, -200, 0]), [1100, 400, 1100], a, T_STONE2);
+        geo.box(add(b0, [0, 200, 0]), [1100, 400, 1100], a, T_STONE2);
+        for (let k = 1; k < 4; k++) {
+          const y = R.bottom + (Hh * k) / 4;
+          for (let q = 0; q < 10; q++) {
+            const aa = (q / 10) * Math.PI * 2, bb = ((q + 1) / 10) * Math.PI * 2;
+            geo.line([b0[0] + Math.cos(aa) * 405, y, b0[2] + Math.sin(aa) * 405], [b0[0] + Math.cos(bb) * 405, y, b0[2] + Math.sin(bb) * 405], scale(T_GLOW, 1.2));
+          }
+        }
+        lights.dot(at2(rr, a, R.top - 900), [1, 0.6, 0.2], 200, 0, 0);
+      }
+    }
+  } else if (R.kind === 'flooded') {
+    // a glowing pool fills the chamber, with half-sunken statues
+    const wy = R.bottom + 300;
+    const pos = [], flow = [];
+    for (let j = 0; j < NA; j++) {
+      const a0 = ang(j), a1 = ang(j + 1);
+      const A = at2(0, a0, wy), B = at2(R.wallR, a0, wy), C = at2(R.wallR, a1, wy);
+      pos.push(...A, ...B, ...C);
+      flow.push(0, R.wallR * 3, R.wallR * 3);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('aFlow', new THREE.Float32BufferAttribute(flow, 1));
+    const m = new THREE.Mesh(g, waterMaterial([0.0, 0.05, 0.05], [0.15, 0.9, 0.7]));
+    m.frustumCulled = false;
+    water.push(m);
+    for (let j = 0; j < 10; j++) {
+      const a = (j / 10) * Math.PI * 2;
+      const p = at2(R.wallR - 900, a, wy - 200);
+      if (blocked(add(p, [0, 1200, 0]), 1800)) continue;
+      geo.box(add(p, [0, 900, 0]), [700, 1800, 600], a, T_STONE);
+      geo.box(add(p, [0, 2100, 0]), [600, 700, 600], a, T_STONE2);
+      lights.dot(add(p, [-Math.cos(a) * 320, 2150, -Math.sin(a) * 320]), [0.3, 1, 0.6], 70, 0, 0);
+    }
+    for (let k = 0; k < 120 * density; k++) {
+      const p = at2(rng() * R.wallR, rng() * Math.PI * 2, wy + 20);
+      lights.dot(p, rng() < 0.5 ? [0.3, 1, 0.7] : [1, 0.4, 0.8], 40, 0.3 + rng(), rng());
+    }
+  } else if (R.kind === 'idol') {
+    // the colossal idol pillar at the centre of the great hall
+    const pr = inner - 150;
+    const b0 = at2(0, 0, R.bottom), b1 = at2(0, 0, R.top);
+    geo.cyl(b0, b1, pr, pr * 0.92, 16, [0.4, 0.38, 0.3]);
+    // vertical gold seams and a glowing crown so the idol reads from anywhere in the hall
+    for (let q = 0; q < 16; q++) {
+      const a = (q / 16) * Math.PI * 2;
+      geo.line(at2(pr + 12, a, R.bottom), at2(pr * 0.93 + 12, a, R.top), q % 2 ? scale(T_GOLD, 1.3) : scale(T_GLOW, 0.8));
+    }
+    for (let q = 0; q < 24; q++) {
+      const a = (q / 24) * Math.PI * 2;
+      lights.dot(at2(pr + 300, a, R.top - 400), T_GOLD, 260, 0, 0);
+      lights.dot(at2(pr + 300, a, R.bottom + 600), [1, 0.5, 0.15], 260, 5 + rng() * 4, rng());
+    }
+    for (let y = R.bottom + 1500; y < R.top; y += 1500) {
+      let prev = null;
+      for (let q = 0; q <= 32; q++) {
+        const a = (q / 32) * Math.PI * 2;
+        const p = at2(pr + 15, a, y);
+        if (prev) geo.line(prev, p, (y / 1500) % 2 < 1 ? scale(T_GOLD, 1.6) : scale(T_GLOW, 1.4));
+        prev = p;
+      }
+    }
+    // four giant stone faces with glowing eyes, staring out at the ride
+    for (let k = 0; k < 4; k++) {
+      const a = (k / 4) * Math.PI * 2 + 0.4;
+      for (const yy of [R.top - 2600, R.bottom + Hh * 0.45]) {
+        const fp = at2(pr + 200, a, yy);
+        geo.box(fp, [900, 1600, 1400], -a, T_STONE2);
+        const out = [Math.cos(a), 0, Math.sin(a)], side = [-Math.sin(a), 0, Math.cos(a)];
+        for (const s of [-1, 1]) lights.dot(add(add(fp, scale(out, 470)), add(scale(side, s * 320), [0, 300, 0])), [0.3, 1.0, 0.5], 180, 0, 0);
+        geo.box(add(add(fp, scale(out, 460)), [0, -350, 0]), [40, 120, 700], -a, scale(T_GOLD, 0.8), 0.9);
+      }
+    }
+    // shafts of light falling from the ceiling
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2;
+      const p = at2(R.radius + 1600, a, R.top);
+      for (let q = 0; q < 12; q++) lights.flow(add(p, [(rng() - 0.5) * 300, -10, (rng() - 0.5) * 300]), add(p, [(rng() - 0.5) * 300, -Hh, (rng() - 0.5) * 300]), [1, 0.9, 0.6], 60, 0.15 + rng() * 0.1, rng());
+    }
+  }
 }

@@ -4,6 +4,7 @@ import { World, Trigger } from '../src/physics/world.js';
 import { Movement, Player, HULL } from '../src/physics/movement.js';
 import { SurfBot } from '../src/sim/bot.js';
 import { checkBoosts } from '../src/sim/boosts.js';
+import { passedGate } from '../src/sim/gate.js';
 
 export function buildWorld(map) {
   const w = new World();
@@ -29,14 +30,16 @@ export function playSection(map, world, cp, opts = {}) {
   let maxSpeed = 0, speedAtFork = null;
   const maxTicks = opts.maxTicks ?? 100 * (opts.full ? 400 : 120);
   const usedBoosts = new Set();
+  const prev = { x: 0, y: 0, z: 0 };
   for (let i = 0; i < maxTicks; i++) {
+    prev.x = p.pos.x; prev.y = p.pos.y; prev.z = p.pos.z;
     mv.tick(p, bot.command(p), 1 / 100);
     checkBoosts(map.boosts, usedBoosts, p);
     const sp = p.vel.lenH();
     maxSpeed = Math.max(maxSpeed, sp);
     if (opts.skip && speedAtFork == null && bot.idx >= opts.skip[0]) speedAtFork = sp;
     if (next && bot.idx >= next.idx + 1 && p.surfing) return { ok: true, ticks: i, maxSpeed, endSpeed: sp, speedAtFork };
-    if (gt.touches(p.pos, HULL)) return { ok: true, ticks: i, maxSpeed, endSpeed: sp, speedAtFork, finished: true };
+    if (passedGate(end, prev, p.pos)) return { ok: true, ticks: i, maxSpeed, endSpeed: sp, speedAtFork, finished: true };
     const lp = line[bot.idx];
     if (map.waterY != null && p.pos.y - 36 < map.waterY) return { ok: false, reason: 'splash', ticks: i, idx: bot.idx, of: line.length, pos: p.pos, maxSpeed, speedAtFork };
     const refY = Math.min(lp.p[1], line[Math.min(bot.idx + 1, line.length - 1)].p[1]);

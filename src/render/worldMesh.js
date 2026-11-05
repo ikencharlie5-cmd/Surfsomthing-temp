@@ -179,15 +179,15 @@ export function buildGate(trigger, end = false) {
   g.rotation.y = ((trigger.heading || 0) * Math.PI) / 180;
   const color = end ? new THREE.Color(1.0, 0.85, 0.2) : new THREE.Color(0.1, 1.0, 0.65);
   const ring = new THREE.Mesh(
-    new THREE.TorusGeometry(700, 22, 12, 96),
+    new THREE.TorusGeometry(trigger.radius || 700, 26, 12, 96),
     new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(3), fog: false }),
   );
   const ring2 = new THREE.Mesh(
-    new THREE.TorusGeometry(620, 8, 8, 96),
+    new THREE.TorusGeometry((trigger.radius || 700) * 0.88, 8, 8, 96),
     new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 0.2, 0.8).multiplyScalar(2.5), fog: false }),
   );
   const disc = new THREE.Mesh(
-    new THREE.CircleGeometry(690, 64),
+    new THREE.CircleGeometry((trigger.radius || 700) * 0.98, 64),
     new THREE.ShaderMaterial({
       uniforms: { uTime: { value: 0 }, uColor: { value: color } },
       vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0);} `,

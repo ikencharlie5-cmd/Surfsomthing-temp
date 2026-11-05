@@ -10,12 +10,12 @@
 export const TIERS = ['easy', 'medium', 'hard', 'expert', 'insane', 'extreme'];
 
 export const TIER = {
-  easy: { width: 300, minSpeed: 1050, sections: 10, needles: 1, needleSize: 260, jumps: 0, jumpLen: 0, forks: 0, shiftMax: 220, switchP: 0.2, rMin: 7500 },
-  medium: { width: 265, minSpeed: 1100, sections: 12, needles: 2, needleSize: 220, jumps: 1, jumpLen: 2000, forks: 1, shiftMax: 320, switchP: 0.3, rMin: 6800 },
-  hard: { width: 235, minSpeed: 1150, sections: 13, needles: 3, needleSize: 180, jumps: 1, jumpLen: 2400, forks: 1, shiftMax: 400, switchP: 0.35, rMin: 6200 },
-  expert: { width: 210, minSpeed: 1200, sections: 15, needles: 4, needleSize: 160, jumps: 2, jumpLen: 2800, forks: 2, shiftMax: 450, switchP: 0.4, rMin: 5800 },
-  extreme: { width: 185, minSpeed: 1300, sections: 24, needles: 3, needleSize: 160, jumps: 2, jumpLen: 3400, forks: 1, shiftMax: 520, switchP: 0.45, rMin: 5600, kickers: 4, doubleP: 0.75 },
-  insane: { width: 190, minSpeed: 1250, sections: 17, needles: 5, needleSize: 140, jumps: 3, jumpLen: 3200, forks: 2, shiftMax: 500, switchP: 0.45, rMin: 5500 },
+  easy: { width: 300, minSpeed: 1050, sections: 10, needles: 1, needleSize: 260, jumps: 0, jumpLen: 0, forks: 0, shiftMax: 220, switchP: 0.2, rMin: 7500, kickers: 1, doubleP: 0 },
+  medium: { width: 265, minSpeed: 1100, sections: 12, needles: 2, needleSize: 220, jumps: 1, jumpLen: 2000, forks: 1, shiftMax: 320, switchP: 0.3, rMin: 6800, kickers: 2, doubleP: 0.2 },
+  hard: { width: 235, minSpeed: 1150, sections: 13, needles: 3, needleSize: 180, jumps: 1, jumpLen: 2400, forks: 1, shiftMax: 400, switchP: 0.35, rMin: 6200, kickers: 2, doubleP: 0.35 },
+  expert: { width: 210, minSpeed: 1200, sections: 15, needles: 4, needleSize: 160, jumps: 2, jumpLen: 2800, forks: 2, shiftMax: 450, switchP: 0.4, rMin: 5800, kickers: 3, doubleP: 0.5 },
+  extreme: { width: 185, minSpeed: 1300, sections: 24, needles: 3, needleSize: 160, jumps: 2, jumpLen: 3400, forks: 1, shiftMax: 520, switchP: 0.45, rMin: 5600, kickers: 6, doubleP: 0.75 },
+  insane: { width: 190, minSpeed: 1250, sections: 17, needles: 5, needleSize: 140, jumps: 3, jumpLen: 3200, forks: 2, shiftMax: 500, switchP: 0.45, rMin: 5500, kickers: 3, doubleP: 0.6 },
 };
 
 function rand(seed) {

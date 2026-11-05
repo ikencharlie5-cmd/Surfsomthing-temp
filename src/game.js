@@ -10,6 +10,7 @@ import { buildTheme, buildSetPieces } from './render/scenery.js';
 import { EndlessTrack } from './maps/endless.js';
 import { SurfBot } from './sim/bot.js';
 import { checkBoosts } from './sim/boosts.js';
+import { passedGate } from './sim/gate.js';
 import * as store from './storage.js';
 
 export const TICK = 1 / 100;
@@ -301,7 +302,7 @@ export class Game {
       run.cp++;
       if (!this.demo && run.status === 'running' && next.hint) this.ev.onHint?.(next.hint);
     }
-    if (this.endTrig && this.endTrig.touches(p.pos, HULL)) {
+    if (this.endTrig && passedGate(this.endTrig, this.prevPos, p.pos)) {
       if (this.demo) { this.restart(); return; }
       this._finish();
       return;

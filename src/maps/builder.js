@@ -194,6 +194,7 @@ export class Course {
     this.structures = []; // enclosed set pieces the course passes through
     this.boosts = []; // speed rings
     this.kickers = [];
+    this.curves = []; // every curve's centre (set pieces are built around them)
     this.minY = Infinity;
     this.slope = 0.2; // drop per unit length of the last ramp move
   }
@@ -257,6 +258,7 @@ export class Course {
     const c = [this.p[0] + sgn * rx * radius, this.p[2] + sgn * rz * radius];
     const h0 = this.h, y0 = this.p[1];
     this.slope = drop / (Math.abs(angle) * D2R * radius);
+    this.curves.push({ center: [c[0], c[1]], radius, angle, y0, y1: y0 - drop, from: this.line.length - 1, to: this.line.length - 1 + steps });
     for (let i = 1; i <= steps; i++) {
       const t = i / steps;
       const h = h0 - angle * t;
@@ -649,9 +651,15 @@ export function addCourse(b, cfg) {
   ];
   addEnclosure(m, line);
 
-  const gy = g[1] - 500;
-  const gs = cfg.gateSize ?? 1100;
-  b.trigger('end', [g[0] - gs, gy - gs, g[2] - gs], [g[0] + gs, gy + gs, g[2] + gs], { heading: course.h, center: [g[0], gy, g[2]] });
+  // the finish ring hangs where a rider holding the line flies off the end
+  const last = line[line.length - 1];
+  const fsg = last.face === 'right' ? 1 : -1;
+  const [grx, grz] = rightOf(course.h);
+  const glat = fsg * last.width * 0.45;
+  const gy = g[1] - last.height * 0.45 - 260;
+  const gc = [g[0] + grx * glat, gy, g[2] + grz * glat];
+  const gs = 900;
+  b.trigger('end', [gc[0] - gs, gy - gs, gc[2] - gs], [gc[0] + gs, gy + gs, gc[2] + gs], { heading: course.h, center: gc, radius: cfg.gateRadius ?? 650 });
   m.killY = Math.min(m.killY, course.minY - 4000);
   return course;
 }
