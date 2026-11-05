@@ -7,13 +7,14 @@
 //   - climbs and flat run-outs keep speed in the 1500-3000 u/s band
 // plus challenges: thread-the-needle slots, long jumps and fast-line forks.
 
-export const TIERS = ['easy', 'medium', 'hard', 'expert', 'insane'];
+export const TIERS = ['easy', 'medium', 'hard', 'expert', 'insane', 'extreme'];
 
 export const TIER = {
   easy: { width: 300, minSpeed: 1050, sections: 10, needles: 1, needleSize: 260, jumps: 0, jumpLen: 0, forks: 0, shiftMax: 220, switchP: 0.2, rMin: 7500 },
   medium: { width: 265, minSpeed: 1100, sections: 12, needles: 2, needleSize: 220, jumps: 1, jumpLen: 2000, forks: 1, shiftMax: 320, switchP: 0.3, rMin: 6800 },
   hard: { width: 235, minSpeed: 1150, sections: 13, needles: 3, needleSize: 180, jumps: 1, jumpLen: 2400, forks: 1, shiftMax: 400, switchP: 0.35, rMin: 6200 },
   expert: { width: 210, minSpeed: 1200, sections: 15, needles: 4, needleSize: 160, jumps: 2, jumpLen: 2800, forks: 2, shiftMax: 450, switchP: 0.4, rMin: 5800 },
+  extreme: { width: 185, minSpeed: 1300, sections: 24, needles: 3, needleSize: 160, jumps: 2, jumpLen: 3400, forks: 1, shiftMax: 520, switchP: 0.45, rMin: 5600, kickers: 4, doubleP: 0.75 },
   insane: { width: 190, minSpeed: 1250, sections: 17, needles: 5, needleSize: 140, jumps: 3, jumpLen: 3200, forks: 2, shiftMax: 500, switchP: 0.45, rMin: 5500 },
 };
 
@@ -74,6 +75,7 @@ export function generateCourse(c, o) {
   place('jump', Math.max(0, T.jumps + (tw.jumps || 0)));
   if (o.forks !== false) place('fork', Math.max(0, T.forks + (tw.forks || 0)));
   place('needle', Math.max(0, T.needles + (tw.needles || 0)));
+  place('kicker', Math.max(0, (T.kickers || 0) + (tw.kickers || 0)));
   place('boost', tw.boost || 0);
 
   let drift = 0;
@@ -95,6 +97,18 @@ export function generateCourse(c, o) {
       c.straight(lerp(1500, 2200, r()), lerp(100, 200, r()));
       c.fork({ length: lerp(4400, 5000, r()), speed: Math.max(1750, Math.min(2150, speed() * 0.72)), shift: -outside * lerp(450, 600, r()), gapIn: 1250, gapOut: 1200, color: o.forkColor || [1.0, 0.9, 0.3] });
       c.straight(lerp(1500, 2200, r()), lerp(120, 220, r()));
+      continue;
+    }
+    if (kind === 'kicker') {
+      // build speed, then the flipped drop-in launches you into a real jump
+      c.gap(lerp(900, 1050, r()), 0, ramp);
+      const L = lerp(2200, 2800, r());
+      c.straight(L, L * lerp(0.22, 0.28, r())).straight(lerp(900, 1300, r()), lerp(60, 120, r()));
+      const big = r();
+      const gapLen = lerp(2500, 3100, big);
+      const nd = { size: T.needleSize, top: 3200, ...(o.needle || {}), lintel: undefined };
+      const needles = r() < (T.doubleP ?? 0) ? [{ ...nd, at: 0.3 }, { ...nd, at: 0.66 }] : r() < 0.5 ? [{ ...nd, at: 0.5 }] : null;
+      c.kicker({ length: lerp(2400, 2900, r()), rise: lerp(380, 560, big), gapLen, landDrop: lerp(600, 820, big), landLen: lerp(5000, 6200, r()), needles, ramp: { color: nextColor() } });
       continue;
     }
     if (kind === 'structure') {

@@ -54,8 +54,8 @@ Start with **First Wave**, the tutorial map. It shows hints at each stage.
 - **Exact collision:** ramps are convex brushes. Box traces use the brush's
   Minkowski sum with the player box (face, axis and edge-bevel planes), so you
   don't snag on seams between ramp segments.
-- **50 maps: 10 themes x 5 difficulties.** Each theme has an easy, medium,
-  hard, expert and insane map. Easy is open; finishing a map unlocks the next
+- **60 maps: 10 themes x 6 difficulties.** Each theme has an easy, medium,
+  hard, expert, insane and **extreme** map. Easy is open; finishing a map unlocks the next
   one in its theme. Every map starts with a steep drop-in that flattens out,
   then runs as one continuous line (no teleports, no checkpoints: fall and
   the run restarts). Harder maps are longer (up to ~120k units, about a
@@ -75,6 +75,14 @@ Start with **First Wave**, the tutorial map. It shows hints at each stage.
   | Volcano | Ash Fields (ash waves) | Obsidian Slopes (spike dodge) | Magma Run (lava tube) | Pyroclast (eruption jumps) | Caldera (plunges) |
   | Warp | Warp Lane (boost rings) | Hyperdrive (hyper boosts) | Lightspeed (boost jumps) | Final Overdrive (warp gate) | Singularity (death spiral) |
   | Castle | Gatehouse (gates) | Battlements (merlon dodge) | Moonlit Keep (great hall) | Dragon Spire (spire jumps) | Siege (full siege) |
+
+  **Extreme maps** (unlocked by finishing a theme's insane map): Rogue Wave,
+  Grand Chasm, Underworld, Neon Apocalypse, Supernova, Blue Screen, Temple of
+  Doom, Eruption, Big Bang, Dragonfire Lair. They're 160-180k units long
+  (80-105 s at speed), with four **kickers** each: the drop-in flipped, so
+  the ramp curls up into a lip and launches you up to ~700 units into a
+  2500-3100 unit jump. Most kickers have a **double needle**: two walls
+  inside the jump, each with a slot you have to fly through.
 
   Twist mechanics:
   - **Set pieces:** the course runs straight through a building, such as a

@@ -193,6 +193,7 @@ export class Course {
     this.obstacles = []; // duck/dodge blocks on the ramp face
     this.structures = []; // enclosed set pieces the course passes through
     this.boosts = []; // speed rings
+    this.kickers = [];
     this.minY = Infinity;
     this.slope = 0.2; // drop per unit length of the last ramp move
   }
@@ -306,7 +307,7 @@ export class Course {
     this.p = [this.p[0] + fx * length + rx * shift, this.p[1] - drop, this.p[2] + fz * length + rz * shift];
     this._mark(true);
     this.path = [[...this.p]];
-    if (needle) this._needle(A, [...this.p], needle);
+    if (needle) for (const nd of Array.isArray(needle) ? needle : [needle]) this._needle(A, [...this.p], nd);
     if (boost) this._boost(A, [...this.p], boost);
     return this;
   }
@@ -440,6 +441,31 @@ export class Course {
       center: [c[0] + rx * slot, c[1], c[2] + rz * slot], size: o.size ?? 200, heading: Math.atan2(-fx, -fz) * 180 / Math.PI,
       gapIdx: this.line.length - 1, gapCenter: c, slotLat: slot, reach, yTop, yBot, right: [rx, 0, rz], fwd: [fx, 0, fz], lintel: o.lintel ?? null,
     });
+  }
+
+  /**
+   * Kicker: the drop-in flipped. The ridge flattens then curls UP into a
+   * lip, launching you into the air for a real jump. The landing ramp
+   * starts `gapLen` past the lip, below it, and is long enough to catch
+   * both slow and fast riders. Optional `needles` (array) are walls with
+   * slots inside the jump: two of them makes a double needle.
+   */
+  kicker({ length = 2600, rise = 420, gapLen = 2600, landDrop = 650, landLen = 5500, landSlope = 0.2, needles = null, ramp = {} } = {}) {
+    const [fx, fz] = fwdOf(this.h);
+    const s = [...this.p];
+    const steps = 10;
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      this.p = [s[0] + fx * length * t, s[1] + rise * t * t * t, s[2] + fz * length * t];
+      this._push();
+    }
+    this.slope = -3 * rise / length; // leaving the lip going up
+    const lipIdx = this.line.length - 1;
+    this.gap(gapLen, 0, { ...ramp, drop: landDrop, needle: needles });
+    const ls = landSlope;
+    this.straight(landLen, landLen * ls, Math.max(3, Math.round(landLen / 1500)));
+    this.kickers.push({ lipIdx, gapIdx: lipIdx + 1, gapLen });
+    return this;
   }
 
   /**
@@ -615,6 +641,7 @@ export function addCourse(b, cfg) {
   m.obstacles = course.obstacles;
   m.structures = course.structures;
   m.boosts = course.boosts;
+  m.kickers = course.kickers;
   m.brushes.push(...course.extra);
   m.checkpoints = [
     { idx: 0, pos: spawn, yaw: h * D2R, hint: cfg.startHint || null, start: true },

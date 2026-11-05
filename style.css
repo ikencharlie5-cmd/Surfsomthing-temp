@@ -217,3 +217,5 @@ kbd { font-family: var(--font-display); font-size: 12px; padding: 2px 6px; borde
 #finish-global { font-family: var(--font-display); color: var(--cyan); margin-top: 8px; letter-spacing: 0.08em; }
 #finish-name { margin-top: 10px; }
 table.lb td.who { color: var(--text); font-weight: 600; }
+
+.diff.extreme { color: #05010d; border: 1px solid #fff; background: linear-gradient(90deg, #ffe14d, #ff2bd6, #00f0ff); font-weight: 700; }

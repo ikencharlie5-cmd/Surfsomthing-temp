@@ -44,10 +44,10 @@ test('unlock chain: every locked map can eventually be unlocked', async () => {
 
 test('every theme has five maps, easy to insane, chained unlocks', async () => {
   const { THEMES } = await import('../src/maps/index.js');
-  const tiers = ['easy', 'medium', 'hard', 'expert', 'insane'];
+  const tiers = ['easy', 'medium', 'hard', 'expert', 'insane', 'extreme'];
   for (const th of THEMES) {
     const maps = MAPS.filter((m) => m.group === th.id);
-    assert.equal(maps.length, 5, th.id);
+    assert.equal(maps.length, 6, th.id);
     maps.forEach((m, i) => {
       assert.equal(m.difficulty, tiers[i], m.id);
       assert.deepEqual(m.unlock?.after ?? null, i ? [maps[i - 1].id] : null, m.id);
