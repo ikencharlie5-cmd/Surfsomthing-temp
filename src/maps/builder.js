@@ -422,7 +422,7 @@ export class Course {
     const faceSign = this.opts.face === 'right' ? 1 : -1;
     const slot = faceSign * w * 0.45; // where the bot (and a clean rider) flies
     const half = (o.size ?? 200) / 2;
-    const reach = w + 1600;
+    const reach = w + (o.reach ?? 1600);
     const yTop = Math.max(A[1], B[1]) + (o.top ?? 1100);
     const yBot = Math.min(A[1], B[1]) - h - (o.bottom ?? 1700);
     const thick = 60;
@@ -436,10 +436,18 @@ export class Course {
     const color = o.color || [0.9, 0.9, 1.0];
     // castle gates are drawn by the castle scenery instead
     const meta = { kind: o.kind || 'wall', color, edge: o.edge ?? 1.2, needle: true, hidden: !!o.castle };
-    this.extra.push({ points: slab(-reach, slot - half, yBot, yTop), ...meta });
-    this.extra.push({ points: slab(slot + half, reach, yBot, yTop), ...meta });
-    if (o.lintel) this.extra.push({ points: slab(slot - half, slot + half, c[1] + o.lintel, yTop), ...meta });
+    const parts = [
+      { l0: -reach, l1: slot - half, lintel: false },
+      { l0: slot + half, l1: reach, lintel: false },
+      ...(o.lintel ? [{ l0: slot - half, l1: slot + half, lintel: true }] : []),
+    ];
+    const brushes = parts.map((q) => {
+      const br = { points: slab(q.l0, q.l1, q.lintel ? c[1] + o.lintel : yBot, yTop), ...meta };
+      this.extra.push(br);
+      return br;
+    });
     this.needles.push({
+      brushes, parts, slab,
       center: [c[0] + rx * slot, c[1], c[2] + rz * slot], size: o.size ?? 200, heading: Math.atan2(-fx, -fz) * 180 / Math.PI,
       gapIdx: this.line.length - 1, gapCenter: c, slotLat: slot, reach, yTop, yBot, right: [rx, 0, rz], fwd: [fx, 0, fz], lintel: o.lintel ?? null,
     });
@@ -602,6 +610,43 @@ function addEnclosure(m, line) {
 }
 
 /**
+ * Make every needle wall a real structure: extend it down toward the ground
+ * and up into the sky, stopping short of any other part of the course that
+ * passes through its footprint. On themed maps the slab is hidden and the
+ * scenery draws the wall in the theme's style.
+ */
+function groundNeedles(m, course) {
+  const line = course.line;
+  const floor = course.minY - 2500;
+  for (const n of course.needles) {
+    const { right: R, fwd: F, gapCenter: c, reach } = n;
+    let bot = floor, top = n.yTop + 5000;
+    for (let i = 0; i < line.length - 1; i++) {
+      const a = line[i], b = line[i + 1];
+      if (i === n.gapIdx - 1 || i === n.gapIdx) continue; // the gap the needle sits in
+      const steps = Math.max(1, Math.ceil(Math.hypot(b.p[0] - a.p[0], b.p[2] - a.p[2]) / 250));
+      for (let k = 0; k <= steps; k++) {
+        const u = k / steps;
+        const x = a.p[0] + (b.p[0] - a.p[0]) * u, y = a.p[1] + (b.p[1] - a.p[1]) * u, z = a.p[2] + (b.p[2] - a.p[2]) * u;
+        const lat = (x - c[0]) * R[0] + (z - c[2]) * R[2];
+        const fw = (x - c[0]) * F[0] + (z - c[2]) * F[2];
+        if (Math.abs(fw) > a.width + 400 || Math.abs(lat) > reach + a.width + 400) continue;
+        if (y < n.yBot) bot = Math.max(bot, y + 900);
+        else if (y - a.height > n.yTop) top = Math.min(top, y - a.height - 900);
+      }
+    }
+    n.yBot = Math.min(n.yBot, bot);
+    n.yTop = Math.max(n.yTop, top);
+    n.brushes.forEach((br, k) => {
+      const q = n.parts[k];
+      br.points = n.slab(q.l0, q.l1, q.lintel ? c[1] + n.lintel : n.yBot, n.yTop);
+      if (m.theme) br.hidden = true;
+    });
+    delete n.slab;
+  }
+}
+
+/**
  * Build a whole continuous map: start platform, the course, checkpoints,
  * enclosures and the finish gate.
  * @param {MapBuilder} b
@@ -645,6 +690,7 @@ export function addCourse(b, cfg) {
   m.boosts = course.boosts;
   m.kickers = course.kickers;
   m.brushes.push(...course.extra);
+  groundNeedles(m, course);
   m.checkpoints = [
     { idx: 0, pos: spawn, yaw: h * D2R, hint: cfg.startHint || null, start: true },
     ...course.checkpoints.map((c) => ({ idx: c.idx, hint: c.hint, ...checkpointSpawn(line, c.idx) })),

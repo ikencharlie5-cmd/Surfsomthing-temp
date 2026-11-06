@@ -132,8 +132,13 @@ Start with **First Wave**, the tutorial map. It shows hints at each stage.
   The newer maps are laid out by a seeded generator (`src/maps/generator.js`)
   that varies the section mix per map. A seed is only used once the surf bot
   has finished it, including every fast line (`node tools/seed-search.mjs`).
-- **Thread the needle:** solid walls across some gaps with one narrow slot to
-  fly through (castle maps draw them as gatehouses with a raised portcullis).
+- **Thread the needle:** real walls across some gaps with one narrow slot to
+  fly through. They stand on the ground and rise into the sky, drawn in each
+  theme's style: rock faces with a crack (canyon, cave, beach, volcano),
+  pairs of skyscrapers (city), bulkheads with hazard stripes (station,
+  servers), carved stone with torches (jungle, keep), energy barriers (warp)
+  and gatehouses (castle). On the banger maps they reach all the way in to
+  the landmark.
   Slots shrink with difficulty, from 260 units on easy to 125 on insane.
   Miss the slot and you crash.
 - **Long jumps:** a steep launch ramp, then a 2000-3500 unit gap that only

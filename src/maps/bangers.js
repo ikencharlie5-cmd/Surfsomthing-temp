@@ -30,7 +30,7 @@ export function buildBanger(def) {
   const col = () => pal[(ci++) % pal.length];
   const needle = (size, at = 0.5) => ({ size, at, color: def.gateColor || [0.5, 0.9, 1.0], edge: 1.6 });
   const dbl = (size) => [needle(size, 0.3), needle(size, 0.66)];
-  const gapFor = (k) => (k === 'g' ? { needle: needle(def.gate ?? 230) } : { boost: { mult: 1.08 } });
+  const gapFor = (k) => (k === 'g' ? { needle: { ...needle(def.gate ?? 230), reach: 6500 } } : { boost: { mult: 1.08 } });
   const groups = { in: [], fin: [] };
 
   const course = addCourse(b, {

@@ -1939,7 +1939,7 @@ export function buildSetPieces(map, quality = 'high') {
 
 function buildSetPiecesInner(map, quality) {
   const structures = map.structures || [], boosts = map.boosts || [];
-  if (!structures.length && !boosts.length) return null;
+  if (!structures.length && !boosts.length && !(map.needles || []).length) return null;
   const group = new THREE.Group();
   const geo = new Geo();
   const lights = new Lights();
@@ -2052,6 +2052,8 @@ function buildSetPiecesInner(map, quality) {
       }
     }
   }
+
+  drawNeedleWalls(geo, lights, map, rng);
 
   const mat = propMaterial({ dir: [-0.35, 0.5, -0.8], color: [0.5, 0.5, 0.6], ambient: [0.22, 0.2, 0.26], lamp: 0.6, lampColor: [1.0, 0.75, 0.5] });
   finish(group, geo, mat);
@@ -2584,4 +2586,111 @@ function landmark(geo, lights, spin, group, L, map, rng) {
       default: break;
     }
   } finally { RIDE_OFF = false; }
+}
+
+// ---------------------------------------------------------------------------
+// Needle walls drawn as part of the world (rock faces, towers, bulkheads...)
+// ---------------------------------------------------------------------------
+
+const NEEDLE_STYLE = {
+  beach: 'rock', canyon: 'rock', cave: 'rock', volcano: 'rock',
+  city: 'tower', station: 'bulkhead', servers: 'bulkhead', jungle: 'stone', castle: 'stone', vortex: 'energy',
+};
+const ROCK_COL = {
+  beach: (p) => mix([0.3, 0.17, 0.26], [0.46, 0.28, 0.34], fbm3(p[0] / 700, p[1] / 500, p[2] / 700, 3)),
+  canyon: (p) => strataColor(p),
+  cave: (p) => mix([0.07, 0.08, 0.12], [0.2, 0.2, 0.28], fbm3(p[0] / 600, p[1] / 600, p[2] / 600, 3)),
+  volcano: (p) => mix(BASALT, [0.17, 0.09, 0.09], fbm3(p[0] / 600, p[1] / 500, p[2] / 600, 3)),
+};
+
+function needleThemeKey(map) {
+  const t = map.theme?.type;
+  if (t === 'landmark') return THEME_OF[map.theme.landmark];
+  if (t === 'temple-complex') return 'jungle';
+  if (t === 'castle') return null; // generated castle maps draw gatehouses already
+  return t || null;
+}
+
+function drawNeedleWalls(geo, lights, map, rng) {
+  const key = needleThemeKey(map);
+  const style = NEEDLE_STYLE[key];
+  if (!style) return;
+  RIDE_OFF = true;
+  try {
+    for (const n of map.needles || []) {
+      const c = n.gapCenter, R = n.right, F = n.fwd;
+      const P = (lat, y, fw) => [c[0] + R[0] * lat + F[0] * fw, y, c[2] + R[2] * lat + F[2] * fw];
+      const half = n.size / 2;
+      const sA = n.slotLat - half, sB = n.slotLat + half;
+      const parts = [[-n.reach, sA, n.yBot], [sB, n.reach, n.yBot]];
+      if (n.lintel != null) parts.push([sA, sB, c[1] + n.lintel]);
+      const T = { rock: 650, tower: 900, bulkhead: 380, stone: 520, energy: 80 }[style];
+      for (const [l0, l1, y0] of parts) wallPiece(geo, lights, P, l0, l1, y0, n.yTop, T, style, key, rng, n);
+      // the slot glows so it reads at speed
+      const glow = { rock: [1.6, 0.9, 0.4], tower: [0.4, 1.6, 1.8], bulkhead: [1.8, 0.9, 0.2], stone: [1.6, 0.8, 0.3], energy: [1.8, 0.4, 1.6] }[style];
+      const yA = c[1] - 1400, yB = c[1] + 1400;
+      for (const fw of [-T - 8, T + 8]) {
+        geo.line(P(sA, yA, fw), P(sA, yB, fw), glow);
+        geo.line(P(sB, yA, fw), P(sB, yB, fw), glow);
+      }
+      for (const l of [sA - 80, sB + 80]) lights.dot(P(l, c[1] + 700, -T - 40), glow.map((v) => v / 1.8), 120, 0, 0);
+    }
+  } finally { RIDE_OFF = false; }
+}
+
+function wallPiece(geo, lights, P, l0, l1, y0, y1, T, style, key, rng, n) {
+  const NX = Math.max(2, Math.ceil((l1 - l0) / 700)), NY = Math.max(2, Math.ceil((y1 - y0) / 700));
+  const col = style === 'rock' ? ROCK_COL[key] : style === 'tower' ? () => [0.03, 0.025, 0.06]
+    : style === 'bulkhead' ? (p) => (Math.floor((p[1] - y0) / 600) % 2 ? STEEL_A : STEEL_B)
+      : style === 'stone' ? (p) => mix(T_STONE2, T_STONE, ((Math.floor(p[1] / 260) + Math.floor((p[0] + p[2]) / 520)) & 1) * 0.6 + 0.2)
+        : () => [0.25, 0.05, 0.3];
+  const glow = style === 'energy' ? 0.55 : 0;
+  // front and back faces (rock bulges outward, away from the slab)
+  for (const side of [-1, 1]) {
+    const grid = [];
+    for (let i = 0; i <= NX; i++) {
+      const row = [];
+      for (let j = 0; j <= NY; j++) {
+        const lat = l0 + ((l1 - l0) * i) / NX, y = y0 + ((y1 - y0) * j) / NY;
+        let fw = side * T;
+        if (style === 'rock') {
+          const p0 = P(lat, y, 0);
+          const edge = Math.min(1, Math.min(lat - l0, l1 - lat) / 600); // keep slot edges straight
+          fw += side * fbm3(p0[0] / 900, p0[1] / 700, p0[2] / 900, 3) * 900 * edge;
+        }
+        row.push(P(lat, y, fw));
+      }
+      grid.push(row);
+    }
+    for (let i = 0; i < NX; i++) for (let j = 0; j < NY; j++) {
+      const a = grid[i][j], b = grid[i + 1][j], cc = grid[i + 1][j + 1], d = grid[i][j + 1];
+      const cl = col(a);
+      if (side < 0) { geo.tri(a, cc, b, cl, cl, cl, glow); geo.tri(a, d, cc, cl, cl, cl, glow); }
+      else { geo.tri(a, b, cc, cl, cl, cl, glow); geo.tri(a, cc, d, cl, cl, cl, glow); }
+    }
+  }
+  // the sides (slot edges and outer ends) and the top
+  for (const l of [l0, l1]) geo.quad(P(l, y0, -T), P(l, y0, T), P(l, y1, T), P(l, y1, -T), col(P(l, y0, 0)), glow);
+  geo.quad(P(l0, y1, -T), P(l1, y1, -T), P(l1, y1, T), P(l0, y1, T), col(P(l0, y1, 0)), glow);
+
+  // style details
+  if (style === 'tower') {
+    const cols = [[0.3, 1.4, 1.6], [1.6, 0.3, 1.2], [1.6, 1.2, 0.3]];
+    const wc = cols[Math.floor(rng() * 3)];
+    for (let y = y0 + 400; y < y1; y += 420) for (const fw of [-T - 6, T + 6]) geo.line(P(l0, y, fw), P(l1, y, fw), scale(wc, 0.35));
+    for (const fw of [-T - 6, T + 6]) for (const l of [l0, l1]) geo.line(P(l, y0, fw), P(l, y1, fw), wc);
+    lights.dot(P((l0 + l1) / 2, y1 + 80, 0), [1, 0.1, 0.1], 120, 0.7, rng());
+  } else if (style === 'bulkhead') {
+    for (let y = y0; y < y1; y += 600) for (const fw of [-T - 6, T + 6]) geo.line(P(l0, y, fw), P(l1, y, fw), [0.3, 0.5, 0.8]);
+    // hazard stripes along the slot edge
+    const edgeL = Math.abs(l1 - n.slotLat) < Math.abs(l0 - n.slotLat) ? l1 : l0;
+    const dir = edgeL === l1 ? -1 : 1;
+    for (let y = n.gapCenter[1] - 1400; y < n.gapCenter[1] + 1400; y += 200) for (const fw of [-T - 7, T + 7]) geo.line(P(edgeL, y, fw), P(edgeL + dir * 160, y + 160, fw), [1.8, 1.2, 0.1]);
+  } else if (style === 'stone') {
+    for (let y = y0 + 900; y < y1; y += 1300) for (const fw of [-T - 6, T + 6]) geo.line(P(l0, y, fw), P(l1, y, fw), [0.3, 1.1, 0.6]);
+    const edgeL = Math.abs(l1 - n.slotLat) < Math.abs(l0 - n.slotLat) ? l1 : l0;
+    lights.dot(P(edgeL + (edgeL === l1 ? -90 : 90), n.gapCenter[1] + 300, -T - 60), [1, 0.55, 0.15], 140, 7 + rng() * 4, rng());
+  } else if (style === 'energy') {
+    for (let y = y0; y < y1; y += 500) for (const fw of [-T - 6, T + 6]) geo.line(P(l0, y, fw), P(l1, y, fw), [1.4, 0.3, 1.4]);
+  }
 }
