@@ -92,25 +92,24 @@ Start with **First Wave**, the tutorial map. It shows hints at each stage.
   kickers, the flooded chamber, and a final sprint around the idol in the
   great hall.
 
-  **Inside-the-landmark maps:** each theme's medium slot is ridden INSIDE a
-  giant landmark (`src/maps/interiors.js`, `src/maps/the-keep.js`; jungle keeps
-  the Lost Temple). Every room is a closed, solid enclosure (walls, ceiling,
-  floor; touching the floor is a fall) and the ramps are built into the floor.
-  You drop into a tower shaft, corkscrew down it, burst into a great hall,
-  slalom its doorways, kick across it through double doorways, duck & dodge
-  through a cellar and break out of the exit gate. Each takes about 55-70 s.
+  **Landmark weave maps:** each theme's medium slot (`src/maps/weave.js`;
+  castle keeps The Keep, jungle the Lost Temple) is built round one giant
+  hollow landmark. The route loops round it, dives in through its walls,
+  circles inside, bursts back out and passes over and under itself on the
+  way down. Holes are cut in the landmark wherever the ride goes through,
+  edged with light. Every map has its own route:
 
-  | Theme | Map | Inside |
+  | Theme | Map | Route |
   | --- | --- | --- |
-  | Beach | Lighthouse Point | the lighthouse tower, keeper's hall, sea cellar |
-  | Canyon | Spire Valley | caverns carved through the red-rock spire |
-  | Cave | Crystal Heart | the glowing crystal geode |
-  | City | Spire Tower | the megatower's elevator shaft and neon atrium |
-  | Space Station | Reactor Core | reactor access shaft and core chamber |
-  | Server Farm | Mainframe | cooling shaft and server halls |
+  | Beach | Lighthouse Point | spiral round a striped lighthouse, in through the wall, corkscrew round the lamp, out over the sea |
+  | Canyon | Spire Valley | figure eight round twin rock spires, tunnelling through each |
+  | Cave | Crystal Heart | into a hollow glowing geode, two laps round the crystal heart, back out |
+  | City | Spire Tower | three loops that punch straight through the megatower, lower each time |
+  | Space Station | Reactor Core | into the reactor chamber, a lap round the core, out and back through |
+  | Server Farm | Mainframe | slalom through the server stacks, loop back and run under the slalom through them again |
   | Jungle | Lost Temple | pyramid, temple chambers, idol |
-  | Volcano | Inferno | lava tubes over a molten floor |
-  | Warp | Event Zero | energy corridors of the warp gate |
+  | Volcano | Inferno | start in the crater, corkscrew down into the magma chamber, out a side vent |
+  | Warp | Event Zero | spiral down through stacked accretion disks round a black hole, slingshot out |
   | Castle | The Keep | the keep's tower, great hall and crypt |
 
   **Kickers on every map:** easy 1, medium/hard 2, expert/insane 3,

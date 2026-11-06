@@ -2373,8 +2373,10 @@ function buildLandmarkScene(map, t, density) {
 
   // scattered props that set the scene (the ride filter keeps them off the track)
   const n = Math.round(140 * density);
+  if (map.shells) drawShells(geo, lights, map, rng);
   for (let i = 0; i < n; i++) {
     const x = x0 + rng() * (x1 - x0), z = z0 + rng() * (z1 - z0);
+    if (map.shells && inShell(map, x, z)) continue;
     const p = [x, G, z];
     if (theme === 'canyon') { if (rng() < 0.25) mesa(geo, p, 1200 + rng() * 2000, 2000 + rng() * 4000, rng); else if (rng() < 0.6) hoodoo(geo, p, 800 + rng() * 1500, rng); else saguaro(geo, p, 400 + rng() * 400, rng); }
     else if (theme === 'volcano') { if (rng() < 0.5) geo.blob(add(p, [0, 100, 0]), 200 + rng() * 500, mix(BASALT, [0.15, 0.08, 0.09], rng()), 0, rng, 0.7); else { const h = 600 + rng() * 2400; geo.cyl(p, add(p, [0, h, 0]), 120 + rng() * 150, 0, 5, [0.12, 0.05, 0.14]); geo.line(p, add(p, [0, h, 0]), [1.2, 0.3, 1.4]); } lights.flow(add(p, [0, 100, 0]), add(p, [(rng() - 0.5) * 600, 3000, (rng() - 0.5) * 600]), [1, 0.45, 0.1], 30, 0.15, rng()); }
@@ -2394,6 +2396,274 @@ function buildLandmarkScene(map, t, density) {
   finish(group, geo, mat, (time) => { for (const s of spin) s(time); });
   finishLights(group, lights);
   return group;
+}
+
+// ---------------------------------------------------------------------------
+// Hollow landmark shells (weave maps): towers, geodes, cones and disks that
+// the ride loops round and dives through. Panels are cut wherever the ride
+// passes, the holes are edged with light, and both faces are drawn so the
+// landmark reads from outside and inside.
+// ---------------------------------------------------------------------------
+
+const SHELL_LOOK = {
+  lighthouse: {
+    out: (p, i, j) => (Math.floor(j / 3) % 2 ? [0.9, 0.14, 0.22] : [0.93, 0.9, 0.86]),
+    in: () => [0.62, 0.58, 0.55], edge: [1.8, 0.6, 0.9], light: [1, 0.85, 0.55], cap: 'lamp',
+  },
+  spire: {
+    out: (p) => strataColor(p), in: (p) => scale(strataColor(p), 0.5), edge: [1.7, 0.8, 0.3], light: [1, 0.6, 0.3], bulge: 0.12, cap: 'rock',
+  },
+  geode: {
+    out: (p) => mix([0.16, 0.15, 0.19], [0.32, 0.3, 0.36], fbm3(p[0] / 2500, p[1] / 2500, p[2] / 2500, 3)),
+    in: (p) => mix([0.25, 0.55, 1.0], [0.75, 0.4, 1.0], fbm3(p[0] / 1800, p[1] / 1800, p[2] / 1800, 3)), inGlow: 0.55,
+    edge: [0.6, 1.5, 1.9], light: [0.5, 0.9, 1], bulge: 0.07,
+  },
+  skyscraper: {
+    out: (p, i, j) => (j % 2 ? [0.06, 0.07, 0.12] : [0.12, 0.13, 0.2]), in: () => [0.16, 0.16, 0.22],
+    edge: [0.3, 1.5, 1.7], light: [0.6, 0.95, 1], cap: 'roof', windows: [[1, 0.4, 0.8], [0.3, 0.9, 1], [1, 0.85, 0.35]],
+  },
+  reactor: {
+    out: (p, i, j) => (j % 3 === 0 ? [0.22, 0.24, 0.3] : (i + j) % 2 ? STEEL_A : [0.27, 0.3, 0.36]), in: (p, i, j) => (j % 3 === 0 ? [0.12, 0.13, 0.17] : [0.22, 0.24, 0.3]),
+    edge: [1.8, 1.0, 0.2], light: [0.4, 0.95, 1], cap: 'dome', core: [0.4, 0.95, 1.0],
+  },
+  mainframe: {
+    out: (p, i, j) => (j % 2 ? [0.05, 0.06, 0.07] : [0.08, 0.09, 0.1]), in: () => [0.1, 0.12, 0.11],
+    edge: [0.3, 1.7, 0.6], light: [0.3, 1, 0.5], cap: 'roof', leds: [[0.2, 1, 0.45], [0.2, 0.8, 1], [1, 0.7, 0.2]],
+  },
+  volcano: {
+    out: (p) => mix(BASALT, [0.2, 0.1, 0.1], fbm3(p[0] / 1800, p[1] / 1400, p[2] / 1800, 3)),
+    in: (p) => mix([0.35, 0.07, 0.03], [0.12, 0.05, 0.05], fbm3(p[0] / 1500, p[1] / 1500, p[2] / 1500, 3)), inGlow: 0.25,
+    edge: [1.9, 0.6, 0.1], light: [1, 0.45, 0.1], bulge: 0.08, lava: true,
+  },
+  warp: { edge: [1.8, 0.5, 1.6], light: [1, 0.5, 1] },
+};
+
+function rideSamples(map) {
+  const cell = 2000, grid = new Map();
+  const line = map.line;
+  for (let i = 0; i < line.length - 1; i++) {
+    const a = line[i], b = line[i + 1];
+    const n = Math.max(1, Math.ceil(Math.hypot(b.p[0] - a.p[0], b.p[2] - a.p[2]) / 250));
+    for (let k = 0; k <= n; k++) {
+      const u = k / n;
+      const s = [a.p[0] + (b.p[0] - a.p[0]) * u, a.p[1] + (b.p[1] - a.p[1]) * u, a.p[2] + (b.p[2] - a.p[2]) * u, a.width + 330, b.gap ? 1300 : 550, a.height + 300];
+      const key = Math.floor(s[0] / cell) + ',' + Math.floor(s[2] / cell);
+      if (!grid.has(key)) grid.set(key, []);
+      grid.get(key).push(s);
+    }
+  }
+  return (c, hs, y0, y1) => {
+    const r = hs + 1600;
+    for (let cx = Math.floor((c[0] - r) / cell); cx <= Math.floor((c[0] + r) / cell); cx++) {
+      for (let cz = Math.floor((c[2] - r) / cell); cz <= Math.floor((c[2] + r) / cell); cz++) {
+        for (const s of grid.get(cx + ',' + cz) || []) {
+          if (Math.hypot(s[0] - c[0], s[2] - c[2]) > s[3] + hs) continue;
+          if (s[1] + s[4] < y0 || s[1] - s[5] > y1) continue;
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+}
+
+/** inside any shell's footprint (props stay out) */
+function inShell(map, x, z, pad = 600) {
+  for (const s of map.shells || []) {
+    const dx = x - s.center[0], dz = z - s.center[1];
+    if (s.kind === 'disk') continue;
+    const d = s.kind === 'box' ? Math.max(Math.abs(dx), Math.abs(dz)) : Math.hypot(dx, dz);
+    if (d < s.r * (s.kind === 'cone' ? 1 : 1.15) + pad) return true;
+  }
+  return false;
+}
+
+// both faces of a quad: one facing `out`, one facing back in
+function face2(geo, a, b, c, d, out, colOut, colIn, gOut = 0, gIn = 0) {
+  // the material is double sided: give the wall thickness so each face wins on its own side
+  const o = scale(norm(out), 30);
+  const A = add(a, o), B = add(b, o), C = add(c, o), D = add(d, o);
+  const a2 = sub(a, o), b2 = sub(b, o), c2 = sub(c, o), d2 = sub(d, o);
+  const n = cross(sub(b, a), sub(c, a));
+  const fwd = n[0] * out[0] + n[1] * out[1] + n[2] * out[2] > 0;
+  if (fwd) { geo.quad(A, B, C, D, colOut, gOut); geo.quad(a2, d2, c2, b2, colIn, gIn); }
+  else { geo.quad(A, D, C, B, colOut, gOut); geo.quad(a2, b2, c2, d2, colIn, gIn); }
+}
+
+function drawShells(geo, lights, map, rng) {
+  const near = rideSamples(map);
+  const saved = RIDE_OFF;
+  for (const s of map.shells || []) {
+    const L = SHELL_LOOK[s.look] || SHELL_LOOK.reactor;
+    if (s.kind === 'disk') { RIDE_OFF = true; try { drawDisks(geo, lights, s, L, near, rng); } finally { RIDE_OFF = saved; } continue; }
+    const [cx, cz] = s.center;
+    const H = s.yt - s.yb;
+    const per = s.kind === 'box' ? 8 * s.r : 2 * Math.PI * s.r;
+    let NU = Math.max(24, Math.round(per / 750));
+    if (s.kind === 'box') NU = Math.ceil(NU / 4) * 4;
+    const NV = Math.max(6, Math.round((s.kind === 'sphere' ? Math.PI * s.r : H) / 700));
+    const bulge = L.bulge || 0;
+    const vert = [];
+    for (let i = 0; i <= NU; i++) {
+      const col = [];
+      for (let j = 0; j <= NV; j++) {
+        const u = (i % NU) / NU, v = j / NV;
+        let y, rr;
+        if (s.kind === 'sphere') { const th = Math.PI * v; y = s.cy - s.r * Math.cos(th); rr = s.r * Math.sin(th); }
+        else { y = s.yb + H * v; rr = s.kind === 'cone' ? s.r + (s.rTop - s.r) * v : s.r * (1 - (s.taper || 0) * v); }
+        let dx, dz;
+        if (s.kind === 'box') {
+          const t = u * 4, k = Math.floor(t), f = t - k;
+          const sq = [[1, -1 + 2 * f], [1 - 2 * f, 1], [-1, 1 - 2 * f], [-1 + 2 * f, -1]][k % 4];
+          dx = sq[0]; dz = sq[1];
+        } else { dx = Math.cos(u * Math.PI * 2); dz = Math.sin(u * Math.PI * 2); }
+        if (bulge) rr *= 1 + (fbm3(cx / 5000 + dx * 2, y / 2500, cz / 5000 + dz * 2, 3) - 0.5) * 2 * bulge;
+        col.push([cx + dx * rr, y, cz + dz * rr]);
+      }
+      vert.push(col);
+    }
+    const axis = (p) => (s.kind === 'sphere' ? [cx, s.cy, cz] : [cx, p[1], cz]);
+    const cut = [];
+    for (let i = 0; i < NU; i++) {
+      cut.push([]);
+      for (let j = 0; j < NV; j++) {
+        const q = [vert[i][j], vert[i + 1][j], vert[i + 1][j + 1], vert[i][j + 1]];
+        const c = scale(add(add(q[0], q[1]), add(q[2], q[3])), 0.25);
+        const hs = Math.max(...q.map((p) => Math.hypot(p[0] - c[0], p[2] - c[2]))) * 0.7;
+        cut[i].push(near(c, hs, Math.min(...q.map((p) => p[1])), Math.max(...q.map((p) => p[1]))));
+      }
+    }
+    RIDE_OFF = true;
+    try {
+      for (let i = 0; i < NU; i++) for (let j = 0; j < NV; j++) {
+        const a = vert[i][j], b = vert[i + 1][j], c = vert[i + 1][j + 1], d = vert[i][j + 1];
+        const mid = scale(add(add(a, b), add(c, d)), 0.25);
+        const out = sub(mid, axis(mid));
+        if (cut[i][j]) {
+          // light up the rim of the hole
+          const nb = [[i, j - 1, a, b], [i, j + 1, d, c], [i - 1, j, a, d], [i + 1, j, b, c]];
+          for (const [ni, nj, p, q] of nb) {
+            const ii = (ni + NU) % NU;
+            if (nj < 0 || nj >= NV || cut[ii][nj]) continue;
+            const o = scale(norm(out), 25);
+            geo.line(add(p, o), add(q, o), L.edge); geo.line(sub(p, o), sub(q, o), L.edge);
+          }
+          continue;
+        }
+        let co = L.out(mid, i, j), ci = L.in(mid, i, j), go = 0;
+        if (L.windows && rng() < 0.22) { co = L.windows[Math.floor(rng() * L.windows.length)]; go = 0.8; }
+        if (L.lava && s.kind === 'cone' && fbm3(mid[0] / 2000, mid[1] / 3000, mid[2] / 2000, 2) > 0.66) { co = [1, 0.4, 0.08]; go = 0.9; }
+        face2(geo, a, b, c, d, out, co, ci, go, L.inGlow || 0);
+        // inner wall lights and outer details
+        const inward = scale(norm(out), -90);
+        if (i % 3 === 0 && j % 2 === 1 && !near(add(mid, inward), 400, mid[1] - 400, mid[1] + 400)) lights.dot(add(mid, inward), L.light, 120, 0, 0);
+        if (L.leds) for (let k = 0; k < 3; k++) lights.dot(add(mid, scale(norm(out), 30 + rng() * 10)), L.leds[Math.floor(rng() * 3)], 26, rng() < 0.6 ? 1 + rng() * 4 : 0, rng());
+      }
+      shellCaps(geo, lights, s, L, vert, NU, NV, near, rng);
+    } finally { RIDE_OFF = saved; }
+    shellInside(geo, lights, s, L, rng);
+  }
+}
+
+function shellCaps(geo, lights, s, L, vert, NU, NV, near, rng) {
+  const [cx, cz] = s.center;
+  const disc = (j, y, up, colA, colB, g = 0) => {
+    const ctr = [cx, y, cz];
+    for (let i = 0; i < NU; i++) face2(geo, ctr, vert[i][j], vert[i + 1][j], vert[i + 1][j], [0, up, 0], colA, colB, g, 0);
+  };
+  if (s.kind === 'sphere') return;
+  // floor (never in the ride: shells start below everything)
+  disc(0, s.yb, -1, [0.05, 0.05, 0.06], L.lava ? [1, 0.35, 0.05] : L.in([cx, s.yb, cz], 0, 0), 0, L.lava ? 1 : 0);
+  if (L.lava) { for (let k = 0; k < 40; k++) { const a = rng() * Math.PI * 2, r = rng() * s.r * 0.9; lights.flow([cx + Math.cos(a) * r, s.yb + 50, cz + Math.sin(a) * r], [cx + Math.cos(a) * r, s.yb + 4000, cz + Math.sin(a) * r], [1, 0.45, 0.1], 40, 0.1 + rng() * 0.1, rng()); } return; }
+  const top = vert[0][NV][1];
+  if (s.kind === 'cone') return;
+  disc(NV, top, 1, L.out([cx, top, cz], 0, NV + 1), L.in([cx, top, cz], 0, NV), 0);
+  const rTop = Math.hypot(vert[0][NV][0] - cx, vert[0][NV][2] - cz);
+  if (L.cap === 'lamp') {
+    geo.cyl([cx, top, cz], [cx, top + 1800, cz], rTop * 0.55, rTop * 0.55, 16, [1, 0.95, 0.75], 0.95);
+    geo.cyl([cx, top + 1800, cz], [cx, top + 3200, cz], rTop * 0.65, 0, 16, [0.9, 0.14, 0.22]);
+    lights.dot([cx, top + 900, cz], [1, 0.9, 0.6], 3000, 0, 0);
+    for (let k = 0; k < 4; k++) { const a = (k / 4) * Math.PI * 2; lights.flow([cx, top + 900, cz], [cx + Math.cos(a) * 30000, top + 600, cz + Math.sin(a) * 30000], [1, 0.9, 0.6], 260, 0.15, k / 4); }
+  } else if (L.cap === 'roof') {
+    geo.line([cx, top, cz], [cx, top + 4000, cz], [0.8, 0.8, 0.9]);
+    lights.dot([cx, top + 4000, cz], [1, 0.1, 0.1], 200, 0.8, rng());
+    for (let k = 0; k < NU; k += 2) lights.dot(add(vert[k][NV], [0, 30, 0]), L.edge, 90, 0, 0);
+  } else if (L.cap === 'dome') {
+    geo.cyl([cx, top, cz], [cx, top + rTop * 0.5, cz], rTop, 0, 24, [0.3, 0.33, 0.4]);
+    lights.dot([cx, top + rTop * 0.5, cz], L.core, 600, 0.5, 0);
+  } else if (L.cap === 'rock') {
+    geo.blob([cx, top, cz], rTop * 1.05, L.out([cx, top, cz]), 0, rng, 0.45);
+  }
+}
+
+function shellInside(geo, lights, s, L, rng) {
+  const [cx, cz] = s.center;
+  if (L.core) {
+    // the reactor core: a blazing column with rings of light
+    geo.cyl([cx, s.yb, cz], [cx, s.yt, cz], 1300, 1300, 16, L.core, 1);
+    for (let y = s.yb + 1000; y < s.yt; y += 1400) {
+      for (let k = 0; k < 24; k++) { const a = (k / 24) * Math.PI * 2; lights.dot([cx + Math.cos(a) * 2200, y, cz + Math.sin(a) * 2200], L.core, 70, 0, 0); }
+    }
+  }
+  if (s.look === 'geode') {
+    // the crystal heart
+    for (let k = 0; k < 9; k++) {
+      const a = rng() * Math.PI * 2, r = rng() * 900;
+      const base = [cx + Math.cos(a) * r, s.yb + s.r * 0.25, cz + Math.sin(a) * r];
+      const tip = add(base, [Math.cos(a) * 1200 * rng(), s.r * (0.9 + rng() * 0.6), Math.sin(a) * 1200 * rng()]);
+      geo.cyl(base, tip, 500 + rng() * 300, 0, 6, [[0.3, 1, 1], [0.7, 0.5, 1], [0.5, 0.8, 1]][k % 3], 0.9);
+    }
+    lights.dot([cx, s.cy, cz], [0.5, 0.9, 1], 2500, 0, 0);
+  }
+  if (s.look === 'lighthouse') {
+    // the lamp column and a spiral stair round the inner wall
+    geo.cyl([cx, s.yb, cz], [cx, s.yt, cz], 1500, 1200, 12, [0.85, 0.82, 0.78]);
+    let prev = null;
+    for (let k = 0; k <= 160; k++) {
+      const a = k * 0.25, y = s.yb + (s.yt - s.yb) * (k / 160);
+      const p = [cx + Math.cos(a) * (s.r - 150), y, cz + Math.sin(a) * (s.r - 150)];
+      if (prev) geo.line(prev, p, [1.6, 0.9, 0.5]);
+      prev = p;
+    }
+  }
+  if (s.look === 'skyscraper') {
+    // floor slabs edge-lit round the atrium
+    for (let y = s.yb + 1400; y < s.yt; y += 1400) {
+      const r = s.r - 40;
+      const c = [[-r, -r], [r, -r], [r, r], [-r, r]];
+      for (let k = 0; k < 4; k++) geo.line([cx + c[k][0], y, cz + c[k][1]], [cx + c[(k + 1) % 4][0], y, cz + c[(k + 1) % 4][1]], [0.3, 0.9, 1.1]);
+    }
+  }
+  if (s.look === 'mainframe') {
+    for (let k = 0; k < 120; k++) {
+      const side = Math.floor(rng() * 4), f = rng() * 2 - 1, y = s.yb + rng() * (s.yt - s.yb);
+      const r = s.r - 60;
+      const p = [[r, f * r], [f * r, r], [-r, f * r], [f * r, -r]][side];
+      lights.dot([cx + p[0], y, cz + p[1]], L.leds[Math.floor(rng() * 3)], 30, 1 + rng() * 5, rng());
+    }
+  }
+}
+
+function drawDisks(geo, lights, s, L, near, rng) {
+  const [cx, cz] = s.center;
+  const NU = 72, NR = Math.max(6, Math.round((s.r - s.rIn) / 900));
+  const cols = [[1, 0.55, 0.2], [1, 0.3, 0.8], [0.5, 0.3, 1]];
+  for (const [li, y] of s.levels.entries()) {
+    const P = (i, k) => { const a = (i / NU) * Math.PI * 2 + li * 0.3, r = s.rIn + ((s.r - s.rIn) * k) / NR; return [cx + Math.cos(a) * r, y + Math.sin(a * 3 + li) * 120, cz + Math.sin(a) * r]; };
+    for (let i = 0; i < NU; i++) for (let k = 0; k < NR; k++) {
+      const a = P(i, k), b = P(i + 1, k), c = P(i + 1, k + 1), d = P(i, k + 1);
+      const mid = scale(add(add(a, b), add(c, d)), 0.25);
+      const hs = Math.hypot(c[0] - a[0], c[2] - a[2]) * 0.5;
+      if (near(mid, hs, mid[1] - 150, mid[1] + 150)) { geo.line(a, b, L.edge); geo.line(d, c, L.edge); continue; }
+      if ((i + k * 3 + li) % 7 === 0) continue; // gaps in the disk let you see through
+      const t = k / NR, col = mix(cols[li % 3], [0.15, 0.05, 0.3], t);
+      face2(geo, a, b, c, d, [0, 1, 0], col, scale(col, 0.7), 0.85 * (1 - t * 0.6), 0.6 * (1 - t * 0.6));
+    }
+  }
+  // the black hole itself, with a bright photon ring
+  const ys = s.levels, cy = (ys[0] + ys[ys.length - 1]) / 2;
+  geo.blob([cx, cy, cz], s.rIn * 0.7, [0, 0, 0], 0, rng, 1);
+  for (let k = 0; k < 64; k++) { const a = (k / 64) * Math.PI * 2; lights.dot([cx + Math.cos(a) * s.rIn * 0.8, cy, cz + Math.sin(a) * s.rIn * 0.8], [1, 0.8, 0.5], 160, 0, 0); }
 }
 
 function landmark(geo, lights, spin, group, L, map, rng) {
