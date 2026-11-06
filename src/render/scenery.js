@@ -303,6 +303,7 @@ function buildThemeInner(map, t, quality) {
   if (t.type === 'castle') return buildCastle(map, t, density);
   if (t.type === 'temple-complex') return buildTempleComplex(map, t, density);
   if (t.type === 'landmark') return buildLandmarkScene(map, t, density);
+  if (t.type === 'interior') return buildInterior(map, t, density);
   return null;
 }
 
@@ -2607,6 +2608,7 @@ function needleThemeKey(map) {
   const t = map.theme?.type;
   if (t === 'landmark') return THEME_OF[map.theme.landmark];
   if (t === 'temple-complex') return 'jungle';
+  if (t === 'interior') return 'castle';
   if (t === 'castle') return null; // generated castle maps draw gatehouses already
   return t || null;
 }
@@ -2693,4 +2695,78 @@ function wallPiece(geo, lights, P, l0, l1, y0, y1, T, style, key, rng, n) {
   } else if (style === 'energy') {
     for (let y = y0; y < y1; y += 500) for (const fw of [-T - 6, T + 6]) geo.line(P(l0, y, fw), P(l1, y, fw), [1.4, 0.3, 1.4]);
   }
+}
+
+// ----------------------------------------------------------------- interiors (ride inside a landmark)
+
+function buildInterior(map, t, density) {
+  const group = new THREE.Group();
+  const geo = new Geo();
+  const lights = new Lights();
+  const rng = rand(t.seed || 5);
+  const line = map.line;
+  RIDE_OFF = true; // everything here is placed on the walls/floor/ceiling of the enclosure
+  try {
+    for (let i = 0; i < line.length - 1; i++) {
+      const e = line[i], f = line[i + 1], tn = e.tunnel;
+      if (!tn || !tn.interior) continue;
+      const dx = f.p[0] - e.p[0], dz = f.p[2] - e.p[2];
+      const len = Math.hypot(dx, dz) || 1;
+      const F = [dx / len, 0, dz / len], R = [-dz / len, 0, dx / len];
+      const Lw = e.width + tn.side;
+      const at2 = (s, lat, dy) => { const u = s / len; return [e.p[0] + dx * u + R[0] * lat, e.p[1] + (f.p[1] - e.p[1]) * u + dy, e.p[2] + dz * u + R[2] * lat]; };
+      const floorY = -e.height - (tn.bottom ?? 600), ceilY = tn.top ?? 750;
+      // floor (decorative: you never ride down there)
+      geo.quad(at2(0, -Lw, floorY), at2(len, -Lw, floorY), at2(len, Lw, floorY), at2(0, Lw, floorY), tn.interior === 'crypt' ? [0.12, 0.11, 0.13] : [0.2, 0.16, 0.14]);
+      if (tn.interior === 'hall') {
+        // red carpet runner and banners, stained glass, chandeliers
+        geo.quad(at2(0, -Lw * 0.25, floorY + 6), at2(len, -Lw * 0.25, floorY + 6), at2(len, Lw * 0.25, floorY + 6), at2(0, Lw * 0.25, floorY + 6), [0.4, 0.04, 0.06]);
+        for (let s = 300; s < len; s += 900) {
+          for (const side of [-1, 1]) {
+            const wl = side * (Lw - 20);
+            geo.box(at2(s, wl, ceilY * 0.45), [40, 1000, 360], Math.atan2(F[0], F[2]), [[0.6, 0.08, 0.12], [0.15, 0.2, 0.6], [0.5, 0.4, 0.1]][Math.floor(rng() * 3)], 0.15);
+            geo.box(at2(s + 450, side * (Lw - 8), ceilY * 0.75), [12, 700, 300], Math.atan2(F[0], F[2]), GLASS[Math.floor(rng() * GLASS.length)], 0.95);
+            lights.dot(at2(s + 450, side * (Lw - 120), ceilY * 0.2), [1, 0.55, 0.15], 140, 7 + rng() * 4, rng());
+            lights.dot(at2(s + 450, side * (Lw - 120), ceilY * 0.2), [1, 0.35, 0.05], 260, 0, 0);
+          }
+          if ((s / 900) % 2 < 1) {
+            const cc = at2(s, 0, ceilY - 500);
+            for (let k = 0; k < 8; k++) { const a = (k / 8) * Math.PI * 2; lights.dot(add(cc, [Math.cos(a) * 260, 0, Math.sin(a) * 260]), [1, 0.75, 0.4], 90, 0, 0); }
+            geo.line(at2(s, 0, ceilY), cc, [0.5, 0.4, 0.3]);
+          }
+        }
+        // ceiling beams
+        for (let s = 0; s < len; s += 700) geo.line(at2(s, -Lw, ceilY - 10), at2(s, Lw, ceilY - 10), [0.6, 0.35, 0.2]);
+      } else {
+        // shaft and crypt: torches and arched ribs
+        for (let s = 200; s < len; s += 650) {
+          for (const side of [-1, 1]) {
+            lights.dot(at2(s, side * (Lw - 40), ceilY * 0.3), [1, 0.55, 0.15], 120, 7 + rng() * 4, rng());
+            lights.dot(at2(s, side * (Lw - 40), ceilY * 0.3), [1, 0.35, 0.05], 220, 0, 0);
+          }
+          let prev = null;
+          for (let k = 0; k <= 8; k++) {
+            const a = (k / 8) * Math.PI;
+            const p = at2(s, -Math.cos(a) * (Lw - 5), floorY + (ceilY - floorY) * (0.55 + 0.45 * Math.sin(a)));
+            if (prev) geo.line(prev, p, tn.interior === 'crypt' ? [0.3, 0.9, 0.6] : [1.2, 0.6, 0.25]);
+            prev = p;
+          }
+          if (tn.interior === 'crypt' && rng() < 0.5) {
+            // candles and coffins along the floor
+            geo.box(at2(s, (rng() < 0.5 ? -1 : 1) * Lw * 0.7, floorY + 120), [300, 240, 700], Math.atan2(F[0], F[2]), [0.25, 0.24, 0.27]);
+            lights.dot(at2(s + 150, Lw * 0.6, floorY + 300), [1, 0.8, 0.4], 60, 9, rng());
+          }
+        }
+      }
+    }
+    // the keep's outer shell: towers and walls around the whole interior
+    const xs = line.map((e) => e.p[0]), zs = line.map((e) => e.p[2]), ys = line.map((e) => e.p[1]);
+    const x0 = Math.min(...xs) - 3000, x1 = Math.max(...xs) + 3000, z0 = Math.min(...zs) - 3000, z1 = Math.max(...zs) + 3000;
+    const yb = Math.min(...ys) - 3000, yt = Math.max(...ys) + 3000;
+    for (const [px, pz] of [[x0, z0], [x1, z0], [x1, z1], [x0, z1]]) tower(geo, lights, [px, yb, pz], yt - yb + 2000, 1400, rng, { r: [1, 0, 0], f: [0, 0, 1] }, 1);
+  } finally { RIDE_OFF = false; }
+  const mat = propMaterial({ dir: [-0.3, 0.5, -0.8], color: [0.4, 0.4, 0.5], ambient: [0.28, 0.24, 0.24], lamp: 1.1, lampColor: [1.0, 0.7, 0.45] });
+  finish(group, geo, mat);
+  finishLights(group, lights);
+  return group;
 }

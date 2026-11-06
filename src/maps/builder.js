@@ -301,6 +301,7 @@ export class Course {
   gap(length, shift = 0, opts = {}) {
     this._flush();
     const { drop: forced, vmin, needle, boost, ...rampOpts } = opts;
+    const faceBefore = this.opts.face;
     const drop = forced ?? this.autoDrop(length, shift, this.slope, vmin);
     Object.assign(this.opts, rampOpts);
     const [fx, fz] = fwdOf(this.h);
@@ -309,7 +310,7 @@ export class Course {
     this.p = [this.p[0] + fx * length + rx * shift, this.p[1] - drop, this.p[2] + fz * length + rz * shift];
     this._mark(true);
     this.path = [[...this.p]];
-    if (needle) for (const nd of Array.isArray(needle) ? needle : [needle]) this._needle(A, [...this.p], nd);
+    if (needle) for (const nd of Array.isArray(needle) ? needle : [needle]) this._needle(A, [...this.p], nd, faceBefore);
     if (boost) this._boost(A, [...this.p], boost);
     return this;
   }
@@ -412,15 +413,17 @@ export class Course {
    * targets), so missing it means slamming into the wall.
    * needle: { size (slot width), color, kind, at (0..1 along the gap), top, bottom }
    */
-  _needle(A, B, o) {
+  _needle(A, B, o, faceBefore = this.opts.face) {
     const t = o.at ?? 0.5;
     const c = [A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t, A[2] + (B[2] - A[2]) * t];
     const dx = B[0] - A[0], dz = B[2] - A[2];
     const l = Math.hypot(dx, dz) || 1;
     const fx = dx / l, fz = dz / l, rx = -fz, rz = fx;
     const w = this.opts.width, h = this.opts.height;
-    const faceSign = this.opts.face === 'right' ? 1 : -1;
-    const slot = faceSign * w * 0.45; // where the bot (and a clean rider) flies
+    // where a clean rider flies: on the old face at the start of the gap,
+    // the new face at the end (side switches cross over mid-air)
+    const sA = faceBefore === 'right' ? 1 : -1, sB = this.opts.face === 'right' ? 1 : -1;
+    const slot = (sA * (1 - t) + sB * t) * w * 0.45;
     const half = (o.size ?? 200) / 2;
     const reach = w + (o.reach ?? 1600);
     const yTop = Math.max(A[1], B[1]) + (o.top ?? 1100);
@@ -576,16 +579,16 @@ function addEnclosure(m, line) {
           pts.push(pt(s, side * lat, s.yb), pt(s, side * lat, s.yt + (t.ceiling ? thick : 0)));
         }
       }
-      m.brushes.push({ points: pts, kind: 'wall', color, edge: t.structure ? 0.7 : 0.45, hidden: !!t.hidden });
+      m.brushes.push({ points: pts, kind: t.interior ? 'floor' : 'wall', color, edge: t.interior ? 0.25 : t.structure ? 0.7 : 0.45, hidden: !!t.hidden });
     }
     if (t.ceiling) {
       const pts = [];
       for (const s of [a, b]) {
         for (const lat of [-(s.L + thick), s.L + thick]) pts.push(pt(s, lat, s.yt), pt(s, lat, s.yt + thick));
       }
-      m.brushes.push({ points: pts, kind: 'wall', color, edge: 0.45, hidden: !!t.hidden });
+      m.brushes.push({ points: pts, kind: t.interior ? 'floor' : 'wall', color, edge: t.interior ? 0.25 : 0.45, hidden: !!t.hidden });
     }
-    if (t.hidden) continue; // themed scenery replaces ribs
+    if (t.hidden || t.interior) continue; // themed scenery replaces ribs
     // ribs: glowing frames along the enclosure
     const len = Math.hypot(b.p[0] - a.p[0], b.p[2] - a.p[2]);
     const n = Math.max(1, Math.round(len / (t.ribSpacing ?? 900)));

@@ -3,6 +3,7 @@
 // Every map has a twist that matches its name (see `twist`).
 import tutorial from './tutorial.js';
 import lostTemple from './lost-temple.js';
+import theKeep from './the-keep.js';
 import { buildBanger, BANGERS } from './bangers.js';
 import { THEMES, themeById, generatedMap } from './themes.js';
 import { TIERS } from './generator.js';
@@ -96,7 +97,7 @@ const PACKS = {
   ],
   castle: [
     G('castle', 'easy', 'castle-gatehouse', 'Gatehouse', 'Ride through the gatehouse and along the walls.', { label: 'Gates', needles: 1 }, 10101),
-    () => buildBanger(BANGERS.castle),
+    theKeep,
     G('castle', 'hard', 'castle-moonlit-keep', 'Moonlit Keep', 'Ride right through the great hall of the keep.', { label: 'Great hall', structure: { kind: 'hall' } }, 97212),
     G('castle', 'expert', 'castle-dragon-spire', 'Dragon Spire', 'Leap between spires and thread narrow portcullises.', { label: 'Spire jumps', jumps: 1, needles: 1 }, 453568),
     G('castle', 'insane', 'castle-siege', 'Siege', 'Storm the hall, dodge the barricades, break through the gates.', { label: 'Full siege', structure: { kind: 'hall' }, dodge: 1, boost: 1 }, 1205874),
