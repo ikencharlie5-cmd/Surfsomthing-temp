@@ -2403,7 +2403,7 @@ function landmark(geo, lights, spin, group, L, map, rng) {
       case 'lighthouse': {
         const sea = map.theme.seaY ?? G;
         for (let k = 0; k < 14; k++) geo.blob(P((rng() - 0.5) * R * 0.9, sea - 200 + rng() * 600, (rng() - 0.5) * R * 0.9), R * (0.18 + rng() * 0.15), mix([0.3, 0.18, 0.26], [0.45, 0.28, 0.32], rng()), 0, rng, 0.6);
-        const h0 = sea + 400, h1 = top + 5500, r0 = Math.min(R * 0.4, 1800);
+        const h0 = sea + 400, h1 = top + 9000, r0 = R * 0.62;
         const bands = 12;
         for (let k = 0; k < bands; k++) {
           const y0 = h0 + ((h1 - h0) * k) / bands, y1 = h0 + ((h1 - h0) * (k + 1)) / bands;
@@ -2435,7 +2435,7 @@ function landmark(geo, lights, spin, group, L, map, rng) {
         break;
       }
       case 'spire': {
-        let y = G - 200, r = Math.min(R * 0.85, 6500);
+        let y = G - 200, r = R * 0.9;
         while (y < top + 7000) {
           const h = 900 + rng() * 900;
           geo.cyl(P((rng() - 0.5) * 200, y, (rng() - 0.5) * 200), P((rng() - 0.5) * 200, y + h, (rng() - 0.5) * 200), r, r * 0.9, 10, strataColor([c[0], y, c[1]]));
@@ -2455,7 +2455,7 @@ function landmark(geo, lights, spin, group, L, map, rng) {
       }
       case 'geode': case 'geode2': {
         const big = L.kind === 'geode';
-        const base = P(0, G, 0), rr = Math.min(R * (big ? 0.4 : 0.3), 3500);
+        const base = P(0, G, 0), rr = R * (big ? 0.55 : 0.45);
         for (let k = 0; k < 10; k++) geo.blob(P((rng() - 0.5) * rr * 2, G + 200, (rng() - 0.5) * rr * 2), rr * (0.4 + rng() * 0.3), [0.1, 0.1, 0.15], 0, rng, 0.6);
         const cols = [[0.4, 1.0, 1.0], [0.7, 0.5, 1.0], [0.5, 0.8, 1.0]];
         geo.cyl(base, P(0, top + (big ? 6000 : 3500), 0), rr, 0, 6, cols[0], 0.85);
@@ -2469,7 +2469,7 @@ function landmark(geo, lights, spin, group, L, map, rng) {
       }
       case 'skyscraper': case 'skyscraper2': {
         const street = map.theme.streetY ?? G;
-        let w = Math.min(R * 1.1, 7000) * (L.kind === 'skyscraper' ? 1 : 0.8);
+        let w = R * 1.3 * (L.kind === 'skyscraper' ? 1 : 0.85);
         let y = street;
         const hTot = top - street + (L.kind === 'skyscraper' ? 14000 : 9000);
         const tiers = 4;
@@ -2490,7 +2490,7 @@ function landmark(geo, lights, spin, group, L, map, rng) {
         break;
       }
       case 'reactor': case 'reactor2': {
-        const rc = Math.min(R * 0.45, 4500) * (L.kind === 'reactor' ? 1 : 0.7);
+        const rc = R * 0.52 * (L.kind === 'reactor' ? 1 : 0.8);
         const cy = (top + L.lineBot) / 2;
         const core = new THREE.Mesh(new THREE.IcosahedronGeometry(rc, 3), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.4, 1.4, 1.8), fog: true }));
         core.position.set(...P(0, cy, 0)); group.add(core);
@@ -2506,7 +2506,7 @@ function landmark(geo, lights, spin, group, L, map, rng) {
         break;
       }
       case 'mainframe': case 'mainframe2': {
-        const w = Math.min(R * 0.9, 6000) * (L.kind === 'mainframe' ? 1 : 0.75);
+        const w = R * 1.25 * (L.kind === 'mainframe' ? 1 : 0.85);
         const y0 = L.lineBot - 4000, y1 = top + 5000;
         geo.box(P(0, (y0 + y1) / 2, 0), [w, y1 - y0, w], 0, [0.04, 0.05, 0.06]);
         for (let yy = y0; yy < y1; yy += 260) {
@@ -2520,7 +2520,7 @@ function landmark(geo, lights, spin, group, L, map, rng) {
         break;
       }
       case 'volcanocone': {
-        const peak = top + 7000, base = Math.min(R * 0.95, 9000);
+        const peak = top + 9000, base = R * 1.0;
         const rAt = (y) => base * (1 - 0.8 * (y - G) / (peak - G));
         let prev = null;
         for (let l = 0; l <= 8; l++) {
@@ -2537,7 +2537,7 @@ function landmark(geo, lights, spin, group, L, map, rng) {
         break;
       }
       case 'lavafall': {
-        const w = Math.min(R * 0.5, 4000);
+        const w = R * 0.6;
         geo.blob(P(0, top + 2000, 0), w, BASALT, 0, rng, 1.2);
         geo.cyl(P(0, top + 1500, 0), P(0, G, 0), w * 0.3, w * 0.4, 10, [1.4, 0.4, 0.06], 1);
         for (let k = 0; k < 60; k++) lights.flow(P((rng() - 0.5) * w * 0.6, top + 1500, (rng() - 0.5) * w * 0.6), P((rng() - 0.5) * w, G, (rng() - 0.5) * w), [1, 0.6, 0.15], 120, 0.3 + rng() * 0.3, rng());
@@ -2545,7 +2545,7 @@ function landmark(geo, lights, spin, group, L, map, rng) {
       }
       case 'blackhole': case 'star': {
         const cy = (top + L.lineBot) / 2;
-        const rr = Math.min(R * 0.35, 3800);
+        const rr = R * 0.45;
         if (L.kind === 'blackhole') {
           const hole = new THREE.Mesh(new THREE.SphereGeometry(rr, 32, 16), new THREE.MeshBasicMaterial({ color: 0x000000, fog: false }));
           hole.position.set(...P(0, cy, 0)); group.add(hole);
@@ -2568,14 +2568,14 @@ function landmark(geo, lights, spin, group, L, map, rng) {
       }
       case 'keep': case 'gatetower': {
         if (L.kind === 'keep') {
-          const w = Math.min(R * 1.0, 6500), h = top - G + 4500;
+          const w = R * 1.3, h = top - G + 6000;
           geo.box(P(0, G + h / 2, 0), [w, h, w], 0, STONE_A);
           for (let x = -w / 2; x <= w / 2; x += 400) for (const s of [-1, 1]) { geo.box(P(x, G + h + 120, s * w / 2), [220, 240, 220], 0, STONE_B); geo.box(P(s * w / 2, G + h + 120, x), [220, 240, 220], 0, STONE_B); }
           for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) tower(geo, lights, P(sx * w / 2, G, sz * w / 2), h + 1500, Math.min(900, w * 0.14), rng, { r: [1, 0, 0], f: [0, 0, 1] }, 1);
           for (let k = 0; k < 24; k++) { const side = k % 4, u = (rng() - 0.5) * w * 0.8, y = G + h * (0.3 + rng() * 0.6); const p = side === 0 ? P(u, y, -w / 2 - 6) : side === 1 ? P(u, y, w / 2 + 6) : side === 2 ? P(-w / 2 - 6, y, u) : P(w / 2 + 6, y, u); geo.box(p, side < 2 ? [140, 280, 14] : [14, 280, 140], 0, GLASS[k % GLASS.length], 0.95); }
           lights.dot(P(0, G + h + 600, 0), [1, 0.5, 0.15], 500, 6, 0);
         } else {
-          const d = Math.min(R * 0.5, 4000);
+          const d = R * 0.55;
           for (const s of [-1, 1]) tower(geo, lights, P(s * d, G, 0), top - G + 3000, Math.min(1100, R * 0.18), rng, { r: [1, 0, 0], f: [0, 0, 1] }, s);
           for (let k = 0; k < 12; k++) { const a0 = (k / 12) * Math.PI, a1 = ((k + 1) / 12) * Math.PI; geo.cyl(P(-Math.cos(a0) * d, top + 800 + Math.sin(a0) * 1500, 0), P(-Math.cos(a1) * d, top + 800 + Math.sin(a1) * 1500, 0), 300, 300, 6, STONE_A); }
         }

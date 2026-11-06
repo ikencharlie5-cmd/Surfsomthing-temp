@@ -92,6 +92,25 @@ Start with **First Wave**, the tutorial map. It shows hints at each stage.
   kickers, the flooded chamber, and a final sprint around the idol in the
   great hall.
 
+  **Banger maps:** each theme's medium slot is a hand-built set piece in the
+  Lost Temple style (`src/maps/bangers.js`). You race around a giant landmark
+  on the inside face, with gates, boost rings and two double-needle kickers,
+  then a duck & dodge run through a building and a finale lap around a second
+  landmark. Each takes about 70-85 s at 2500-3000 u/s.
+
+  | Theme | Banger | Landmarks |
+  | --- | --- | --- |
+  | Beach | Lighthouse Point | neon lighthouse with a sweeping beam, sea stacks |
+  | Canyon | Spire Valley | towering red-rock spire, giant natural arch |
+  | Cave | Crystal Heart | colossal glowing crystal clusters |
+  | City | Spire Tower | two setback megatowers |
+  | Space Station | Reactor Core | blazing reactor cores with spinning rings |
+  | Server Farm | Mainframe | LED mainframe towers streaming data |
+  | Jungle | Lost Temple | pyramid, temple chambers, idol |
+  | Volcano | Inferno | erupting volcano, falling river of lava |
+  | Warp | Event Zero | black hole with accretion disk, a star |
+  | Castle | The Keep | great keep, gate towers |
+
   **Kickers on every map:** easy 1, medium/hard 2, expert/insane 3,
   extreme 6. Harder tiers use more double needles.
 
