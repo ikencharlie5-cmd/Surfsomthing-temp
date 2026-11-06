@@ -302,6 +302,7 @@ function buildThemeInner(map, t, quality) {
   if (t.type === 'vortex') return buildVortex(map, t, density);
   if (t.type === 'castle') return buildCastle(map, t, density);
   if (t.type === 'temple-complex') return buildTempleComplex(map, t, density);
+  if (t.type === 'landmark') return buildLandmarkScene(map, t, density);
   return null;
 }
 
@@ -1927,6 +1928,7 @@ const SET_LOOK = {
   seacave: { outer: [0.32, 0.2, 0.3], trim: [0.3, 1.0, 0.9], light: [0.3, 1.0, 0.9], rock: true, rise: 1000 },
   crystal: { outer: [0.16, 0.2, 0.32], trim: [0.5, 0.9, 1.0], light: [0.5, 0.9, 1.0], rock: true, crystals: true, rise: 900 },
   glowworm: { outer: [0.08, 0.1, 0.13], trim: [0.3, 0.8, 1.0], light: [0.4, 0.85, 1.0], rock: true, worms: true, rise: 900 },
+  sandstone: { outer: [0.5, 0.24, 0.14], trim: [1.0, 0.6, 0.3], light: [1.0, 0.55, 0.2], rock: true, rise: 1000 },
   warpgate: { outer: [0.1, 0.03, 0.18], trim: [1.0, 0.3, 0.9], light: [0.4, 0.9, 1.0], rings: true, rise: 0 },
 };
 
@@ -2314,4 +2316,272 @@ function chamber(geo, lights, R, blocked, rng, density, water) {
       for (let q = 0; q < 12; q++) lights.flow(add(p, [(rng() - 0.5) * 300, -10, (rng() - 0.5) * 300]), add(p, [(rng() - 0.5) * 300, -Hh, (rng() - 0.5) * 300]), [1, 0.9, 0.6], 60, 0.15 + rng() * 0.1, rng());
     }
   }
+}
+
+// ----------------------------------------------------------------- banger landmarks
+
+const GROUND = {
+  canyon: [[0.36, 0.17, 0.1], [0.5, 0.26, 0.14]], volcano: [[0.05, 0.035, 0.04], [0.12, 0.07, 0.07]],
+  castle: [[0.04, 0.08, 0.05], [0.07, 0.11, 0.07]], cave: [[0.05, 0.06, 0.09], [0.12, 0.13, 0.18]],
+  servers: [[0.02, 0.05, 0.04], [0.04, 0.08, 0.06]],
+};
+const THEME_OF = { lighthouse: 'beach', spire: 'canyon', geode: 'cave', skyscraper: 'city', reactor: 'station', mainframe: 'servers', volcanocone: 'volcano', blackhole: 'vortex', keep: 'castle' };
+
+function buildLandmarkScene(map, t, density) {
+  const group = new THREE.Group();
+  const geo = new Geo();
+  const lights = new Lights();
+  const rng = rand(t.seed || 1);
+  const spin = [];
+  const theme = THEME_OF[t.landmark];
+  const G = map.ground;
+  const xs = map.line.map((e) => e.p[0]), zs = map.line.map((e) => e.p[2]);
+  const pad = 14000;
+  const x0 = Math.min(...xs) - pad, x1 = Math.max(...xs) + pad, z0 = Math.min(...zs) - pad, z1 = Math.max(...zs) + pad;
+
+  // ground (terrain themes)
+  const gc = GROUND[theme];
+  if (gc) {
+    const T = 3000;
+    for (let x = x0; x < x1; x += T) for (let z = z0; z < z1; z += T) {
+      const h = (px, pz) => G + (fbm3(px / 9000, 0, pz / 9000, 3) - 0.5) * (theme === 'cave' ? 600 : 1200);
+      const c = mix(gc[0], gc[1], fbm3(x / 4000, 0, z / 4000, 2));
+      geo.quad([x, h(x, z), z], [x, h(x, z + T), z + T], [x + T, h(x + T, z + T), z + T], [x + T, h(x + T, z), z], c);
+    }
+  }
+  // lava sea under the volcano map, glowing grid under servers
+  if (theme === 'volcano') {
+    const lm = lavaMaterial();
+    const pos = [], flow = [];
+    const y = G - 300;
+    for (let x = x0; x < x1; x += 8000) for (let z = z0; z < z1; z += 8000) {
+      if (fbm3(x / 20000, 0, z / 20000, 2) < 0.52) continue;
+      pos.push(x, y + 320, z, x, y + 320, z + 8000, x + 8000, y + 320, z + 8000, x, y + 320, z, x + 8000, y + 320, z + 8000, x + 8000, y + 320, z);
+      flow.push(0, 1, 2, 0, 2, 1);
+    }
+    if (pos.length) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      g.setAttribute('aFlow', new THREE.Float32BufferAttribute(flow.map((v) => v * 5000), 1));
+      const m = new THREE.Mesh(g, lm); m.frustumCulled = false; group.add(m); spin.push(() => {}); (group.userData.mats ??= []).push(lm);
+    }
+  }
+
+  // scattered props that set the scene (the ride filter keeps them off the track)
+  const n = Math.round(140 * density);
+  for (let i = 0; i < n; i++) {
+    const x = x0 + rng() * (x1 - x0), z = z0 + rng() * (z1 - z0);
+    const p = [x, G, z];
+    if (theme === 'canyon') { if (rng() < 0.25) mesa(geo, p, 1200 + rng() * 2000, 2000 + rng() * 4000, rng); else if (rng() < 0.6) hoodoo(geo, p, 800 + rng() * 1500, rng); else saguaro(geo, p, 400 + rng() * 400, rng); }
+    else if (theme === 'volcano') { if (rng() < 0.5) geo.blob(add(p, [0, 100, 0]), 200 + rng() * 500, mix(BASALT, [0.15, 0.08, 0.09], rng()), 0, rng, 0.7); else { const h = 600 + rng() * 2400; geo.cyl(p, add(p, [0, h, 0]), 120 + rng() * 150, 0, 5, [0.12, 0.05, 0.14]); geo.line(p, add(p, [0, h, 0]), [1.2, 0.3, 1.4]); } lights.flow(add(p, [0, 100, 0]), add(p, [(rng() - 0.5) * 600, 3000, (rng() - 0.5) * 600]), [1, 0.45, 0.1], 30, 0.15, rng()); }
+    else if (theme === 'castle') { if (rng() < 0.6) jungleTree(geo, lights, p, 1200 + rng() * 1500, 400 + rng() * 400, rng); else { geo.cyl(p, add(p, [0, 1800, 0]), 300, 280, 8, STONE_A); geo.cyl(add(p, [0, 1800, 0]), add(p, [0, 2700, 0]), 340, 0, 8, ROOF); lights.dot(add(p, [0, 1400, 0]), [1, 0.55, 0.15], 110, 7, rng()); } }
+    else if (theme === 'cave') { const h = 1500 + rng() * 5000; geo.cyl(p, add(p, [0, h, 0]), 200 + rng() * 400, 0, 6, [0.12, 0.12, 0.17]); if (rng() < 0.4) { const tip = add(p, [(rng() - 0.5) * 500, 800 + rng() * 1200, (rng() - 0.5) * 500]); geo.cyl(p, tip, 150 + rng() * 150, 0, 5, [[0.3, 1, 1], [0.6, 0.5, 1], [0.4, 0.8, 1]][Math.floor(rng() * 3)], 0.8); } }
+    else if (theme === 'servers') { const h = 2000 + rng() * 5000, w = 600 + rng() * 600; geo.box(add(p, [0, h / 2, 0]), [w, h, w], 0, [0.05, 0.06, 0.07]); for (let k = 0; k < 12 * density; k++) lights.dot(add(p, [(rng() - 0.5) * w, rng() * h, w / 2 + 5]), [[0.2, 1, 0.45], [0.2, 0.8, 1], [1, 0.7, 0.2]][Math.floor(rng() * 3)], 30, rng() < 0.6 ? 1 + rng() * 3 : 0, rng()); }
+    else if (theme === 'beach') { if (rng() < 0.5) { const isl = [x, (map.theme.seaY ?? G) - 100, z]; geo.blob(isl, 700 + rng() * 900, [0.95, 0.65, 0.55], 0, rng, 0.35); palm(geo, add(isl, [0, 250, 0]), 700 + rng() * 600, rng, [NEON_GREEN, NEON_CYAN, NEON_PINK][Math.floor(rng() * 3)]); } }
+    else if (theme === 'station' || theme === 'vortex') { const y = G + rng() * (map.line[0].p[1] - G + 8000); geo.blob([x, y, z], 200 + rng() * 900, [0.2, 0.18, 0.24], 0, rng, 0.8); }
+  }
+
+  for (const L of map.landmarks || []) landmark(geo, lights, spin, group, L, map, rng);
+
+  const light = theme === 'beach' ? { dir: [0, 0.35, -1], color: [0.8, 0.45, 0.45], ambient: [0.42, 0.26, 0.4] }
+    : theme === 'canyon' ? { dir: [0.35, 0.7, -0.6], color: [0.42, 0.5, 0.8], ambient: [0.2, 0.13, 0.15], lamp: 0.35, lampColor: [1, 0.6, 0.4] }
+      : { dir: [-0.35, 0.5, -0.8], color: [0.45, 0.45, 0.55], ambient: [0.2, 0.2, 0.24], lamp: 0.6, lampColor: [1, 0.75, 0.5] };
+  const mat = propMaterial(light);
+  finish(group, geo, mat, (time) => { for (const s of spin) s(time); });
+  finishLights(group, lights);
+  return group;
+}
+
+function landmark(geo, lights, spin, group, L, map, rng) {
+  const c = L.center, R = Math.max(2500, L.clear);
+  const G = map.ground;
+  const P = (dx, y, dz) => [c[0] + dx, y, c[1] + dz];
+  const top = L.lineTop;
+  RIDE_OFF = true; // landmarks are sized to the clear zone inside the ride
+  try {
+    switch (L.kind) {
+      case 'lighthouse': {
+        const sea = map.theme.seaY ?? G;
+        for (let k = 0; k < 14; k++) geo.blob(P((rng() - 0.5) * R * 0.9, sea - 200 + rng() * 600, (rng() - 0.5) * R * 0.9), R * (0.18 + rng() * 0.15), mix([0.3, 0.18, 0.26], [0.45, 0.28, 0.32], rng()), 0, rng, 0.6);
+        const h0 = sea + 400, h1 = top + 5500, r0 = Math.min(R * 0.4, 1800);
+        const bands = 12;
+        for (let k = 0; k < bands; k++) {
+          const y0 = h0 + ((h1 - h0) * k) / bands, y1 = h0 + ((h1 - h0) * (k + 1)) / bands;
+          const ra = r0 * (1 - 0.35 * (k / bands)), rb = r0 * (1 - 0.35 * ((k + 1) / bands));
+          geo.cyl(P(0, y0, 0), P(0, y1, 0), ra, rb, 16, k % 2 ? [0.95, 0.92, 0.95] : [0.95, 0.2, 0.45]);
+          for (let q = 0; q < 16; q++) { const a0 = (q / 16) * Math.PI * 2, a1 = ((q + 1) / 16) * Math.PI * 2; geo.line(P(Math.cos(a0) * (ra + 8), y0, Math.sin(a0) * (ra + 8)), P(Math.cos(a1) * (ra + 8), y0, Math.sin(a1) * (ra + 8)), [0.3, 1.4, 1.6]); }
+        }
+        const lr = r0 * 0.7;
+        geo.cyl(P(0, h1, 0), P(0, h1 + 300, 0), lr * 1.3, lr * 1.3, 16, [0.2, 0.2, 0.25]);
+        geo.cyl(P(0, h1 + 300, 0), P(0, h1 + 1300, 0), lr, lr, 16, [1.0, 0.9, 0.6], 1);
+        geo.cyl(P(0, h1 + 1300, 0), P(0, h1 + 2200, 0), lr * 1.2, 0, 16, [0.95, 0.2, 0.45]);
+        lights.dot(P(0, h1 + 800, 0), [1, 0.95, 0.7], 900, 0, 0);
+        // rotating beam
+        const beam = new THREE.Mesh(new THREE.ConeGeometry(1600, 40000, 24, 1, true), new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 0.9, 0.6).multiplyScalar(0.5), transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+        beam.geometry.translate(0, -20000, 0); beam.geometry.rotateZ(Math.PI / 2);
+        const pivot = new THREE.Group(); pivot.position.set(...P(0, h1 + 800, 0)); pivot.add(beam); group.add(pivot);
+        spin.push((t) => { pivot.rotation.y = t * 0.6; });
+        break;
+      }
+      case 'seastacks': {
+        const sea = map.theme.seaY ?? G;
+        for (let k = 0; k < 6; k++) {
+          const a = (k / 6) * Math.PI * 2 + rng(), d = rng() * R * 0.6;
+          const b0 = P(Math.cos(a) * d, sea - 300, Math.sin(a) * d);
+          const h = top - sea + 1500 + rng() * 3000;
+          geo.cyl(b0, add(b0, [0, h, 0]), R * 0.16, R * 0.1, 8, mix([0.26, 0.14, 0.22], [0.38, 0.22, 0.3], rng()));
+          palm(geo, add(b0, [0, h, 0]), 700, rng, [NEON_GREEN, NEON_CYAN, NEON_PINK][k % 3]);
+        }
+        break;
+      }
+      case 'spire': {
+        let y = G - 200, r = Math.min(R * 0.85, 6500);
+        while (y < top + 7000) {
+          const h = 900 + rng() * 900;
+          geo.cyl(P((rng() - 0.5) * 200, y, (rng() - 0.5) * 200), P((rng() - 0.5) * 200, y + h, (rng() - 0.5) * 200), r, r * 0.9, 10, strataColor([c[0], y, c[1]]));
+          y += h; r *= 0.9;
+        }
+        geo.blob(P(0, y + 200, 0), r * 1.3, [0.45, 0.2, 0.12], 0, rng, 0.5);
+        for (let k = 0; k < 6; k++) lights.dot(P(Math.cos(k) * r, y + 100, Math.sin(k) * r), [1, 0.55, 0.2], 120, 6, rng());
+        break;
+      }
+      case 'arch': {
+        const span = R * 0.8, rise = top - G + 3500, th = Math.min(1200, R * 0.15);
+        for (let k = 0; k < 20; k++) {
+          const a0 = (k / 20) * Math.PI, a1 = ((k + 1) / 20) * Math.PI;
+          geo.cyl(P(-Math.cos(a0) * span, G + Math.sin(a0) * rise, 0), P(-Math.cos(a1) * span, G + Math.sin(a1) * rise, 0), th, th, 8, strataColor([c[0], G + Math.sin(a0) * rise, c[1]]));
+        }
+        break;
+      }
+      case 'geode': case 'geode2': {
+        const big = L.kind === 'geode';
+        const base = P(0, G, 0), rr = Math.min(R * (big ? 0.4 : 0.3), 3500);
+        for (let k = 0; k < 10; k++) geo.blob(P((rng() - 0.5) * rr * 2, G + 200, (rng() - 0.5) * rr * 2), rr * (0.4 + rng() * 0.3), [0.1, 0.1, 0.15], 0, rng, 0.6);
+        const cols = [[0.4, 1.0, 1.0], [0.7, 0.5, 1.0], [0.5, 0.8, 1.0]];
+        geo.cyl(base, P(0, top + (big ? 6000 : 3500), 0), rr, 0, 6, cols[0], 0.85);
+        for (let k = 0; k < 9; k++) {
+          const a = (k / 9) * Math.PI * 2, lean = 0.35 + rng() * 0.3;
+          const len = (top - G) * (0.5 + rng() * 0.5);
+          geo.cyl(P(Math.cos(a) * rr * 0.4, G, Math.sin(a) * rr * 0.4), P(Math.cos(a) * len * lean, G + len, Math.sin(a) * len * lean), rr * (0.25 + rng() * 0.2), 0, 6, cols[k % 3], 0.8);
+        }
+        for (let k = 0; k < 40; k++) lights.dot(P((rng() - 0.5) * rr * 3, G + rng() * (top - G + 4000), (rng() - 0.5) * rr * 3), cols[k % 3], 160, 0, 0);
+        break;
+      }
+      case 'skyscraper': case 'skyscraper2': {
+        const street = map.theme.streetY ?? G;
+        let w = Math.min(R * 1.1, 7000) * (L.kind === 'skyscraper' ? 1 : 0.8);
+        let y = street;
+        const hTot = top - street + (L.kind === 'skyscraper' ? 14000 : 9000);
+        const tiers = 4;
+        for (let k = 0; k < tiers; k++) {
+          const h = hTot / tiers;
+          geo.box(P(0, y + h / 2, 0), [w, h, w], 0, [0.03, 0.025, 0.06]);
+          const col = [[0.3, 1.4, 1.6], [1.6, 0.3, 1.2], [1.6, 1.2, 0.3]][k % 3];
+          for (let yy = y + 300; yy < y + h; yy += 450) {
+            const e = w / 2 + 6;
+            const pts = [P(-e, yy, -e), P(e, yy, -e), P(e, yy, e), P(-e, yy, e)];
+            for (let q = 0; q < 4; q++) geo.line(pts[q], pts[(q + 1) % 4], scale(col, 0.45));
+          }
+          for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) geo.line(P(sx * w / 2, y, sz * w / 2), P(sx * w / 2, y + h, sz * w / 2), col);
+          y += h; w *= 0.72;
+        }
+        geo.cyl(P(0, y, 0), P(0, y + 4000, 0), 120, 20, 6, [0.5, 0.5, 0.55]);
+        lights.dot(P(0, y + 4050, 0), [1, 0.1, 0.1], 300, 0.7, 0);
+        break;
+      }
+      case 'reactor': case 'reactor2': {
+        const rc = Math.min(R * 0.45, 4500) * (L.kind === 'reactor' ? 1 : 0.7);
+        const cy = (top + L.lineBot) / 2;
+        const core = new THREE.Mesh(new THREE.IcosahedronGeometry(rc, 3), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.4, 1.4, 1.8), fog: true }));
+        core.position.set(...P(0, cy, 0)); group.add(core);
+        const rings = [];
+        for (let k = 0; k < 3; k++) {
+          const ring = new THREE.Mesh(new THREE.TorusGeometry(rc * (1.35 + k * 0.25), rc * 0.05, 8, 64), new THREE.MeshBasicMaterial({ color: new THREE.Color(...[[1, 0.3, 0.9], [0.3, 1, 1], [1, 0.8, 0.3]][k]).multiplyScalar(2), fog: true }));
+          ring.position.copy(core.position); group.add(ring); rings.push(ring);
+        }
+        spin.push((t) => { rings.forEach((r, i) => { r.rotation.x = t * (0.4 + i * 0.2); r.rotation.y = t * (0.3 - i * 0.15); }); core.scale.setScalar(1 + Math.sin(t * 4) * 0.03); });
+        geo.cyl(P(0, cy - rc * 6, 0), P(0, cy - rc, 0), rc * 0.2, rc * 0.3, 8, STEEL_B);
+        geo.cyl(P(0, cy + rc, 0), P(0, cy + rc * 6, 0), rc * 0.3, rc * 0.2, 8, STEEL_B);
+        for (let k = 0; k < 40; k++) lights.flow(P(0, cy - rc * 5, 0), P((rng() - 0.5) * rc, cy, (rng() - 0.5) * rc), [0.4, 1, 1], 80, 0.5 + rng(), rng());
+        break;
+      }
+      case 'mainframe': case 'mainframe2': {
+        const w = Math.min(R * 0.9, 6000) * (L.kind === 'mainframe' ? 1 : 0.75);
+        const y0 = L.lineBot - 4000, y1 = top + 5000;
+        geo.box(P(0, (y0 + y1) / 2, 0), [w, y1 - y0, w], 0, [0.04, 0.05, 0.06]);
+        for (let yy = y0; yy < y1; yy += 260) {
+          const e = w / 2 + 6;
+          for (const [ax, az, bx, bz] of [[-e, -e, e, -e], [e, -e, e, e], [e, e, -e, e], [-e, e, -e, -e]]) {
+            if (rng() < 0.15) geo.line(P(ax, yy, az), P(bx, yy, bz), [0.1, 0.6, 0.3]);
+            if (rng() < 0.5 * 1) lights.dot(P(ax + (bx - ax) * rng(), yy + 60, az + (bz - az) * rng()), [[0.2, 1, 0.45], [0.2, 0.8, 1], [1, 0.7, 0.2]][Math.floor(rng() * 3)], 22, rng() < 0.6 ? 1 + rng() * 4 : 0, rng());
+          }
+        }
+        for (let k = 0; k < 60; k++) { const a = rng() * Math.PI * 2; const p = P(Math.cos(a) * w * 0.55, y0, Math.sin(a) * w * 0.55); lights.flow(p, add(p, [0, y1 - y0, 0]), [0.3, 1, 0.6], 70, 0.15 + rng() * 0.25, rng()); }
+        break;
+      }
+      case 'volcanocone': {
+        const peak = top + 7000, base = Math.min(R * 0.95, 9000);
+        const rAt = (y) => base * (1 - 0.8 * (y - G) / (peak - G));
+        let prev = null;
+        for (let l = 0; l <= 8; l++) {
+          const y = G + ((peak - G) * l) / 8;
+          const ring = [];
+          for (let k = 0; k < 20; k++) { const a = (k / 20) * Math.PI * 2; const r = rAt(y) * (0.9 + rng() * 0.15); ring.push(P(Math.cos(a) * r, y, Math.sin(a) * r)); }
+          if (prev) for (let k = 0; k < 20; k++) geo.quad(prev[k], prev[(k + 1) % 20], ring[(k + 1) % 20], ring[k], mix(BASALT, [0.16, 0.08, 0.09], rng()));
+          prev = ring;
+        }
+        for (let k = 0; k < 20; k++) geo.tri(prev[k], prev[(k + 1) % 20], P(0, peak - 400, 0), [1.4, 0.4, 0.06], [1.4, 0.4, 0.06], [1.6, 0.8, 0.2], 1);
+        for (let k = 0; k < 6; k++) { const a = rng() * Math.PI * 2; let p = P(Math.cos(a) * rAt(peak), peak, Math.sin(a) * rAt(peak)); for (let s = 1; s <= 8; s++) { const y = peak - ((peak - G) * s) / 8; const q = P(Math.cos(a) * rAt(y) * 1.01, y, Math.sin(a) * rAt(y) * 1.01); geo.cyl(p, q, 160, 160, 5, [1.3, 0.35, 0.05], 1); p = q; } }
+        for (let k = 0; k < 80; k++) lights.flow(P((rng() - 0.5) * 800, peak, (rng() - 0.5) * 800), P((rng() - 0.5) * 6000, peak + 4000 + rng() * 8000, (rng() - 0.5) * 6000), [1, 0.45, 0.1], 200, 0.15 + rng() * 0.25, rng());
+        lights.dot(P(0, peak, 0), [1, 0.5, 0.1], 1500, 0, 0);
+        break;
+      }
+      case 'lavafall': {
+        const w = Math.min(R * 0.5, 4000);
+        geo.blob(P(0, top + 2000, 0), w, BASALT, 0, rng, 1.2);
+        geo.cyl(P(0, top + 1500, 0), P(0, G, 0), w * 0.3, w * 0.4, 10, [1.4, 0.4, 0.06], 1);
+        for (let k = 0; k < 60; k++) lights.flow(P((rng() - 0.5) * w * 0.6, top + 1500, (rng() - 0.5) * w * 0.6), P((rng() - 0.5) * w, G, (rng() - 0.5) * w), [1, 0.6, 0.15], 120, 0.3 + rng() * 0.3, rng());
+        break;
+      }
+      case 'blackhole': case 'star': {
+        const cy = (top + L.lineBot) / 2;
+        const rr = Math.min(R * 0.35, 3800);
+        if (L.kind === 'blackhole') {
+          const hole = new THREE.Mesh(new THREE.SphereGeometry(rr, 32, 16), new THREE.MeshBasicMaterial({ color: 0x000000, fog: false }));
+          hole.position.set(...P(0, cy, 0)); group.add(hole);
+          const disk = new THREE.Group(); disk.position.copy(hole.position); disk.rotation.x = 0.35;
+          for (let k = 0; k < 5; k++) {
+            const ring = new THREE.Mesh(new THREE.RingGeometry(rr * (1.3 + k * 0.35), rr * (1.55 + k * 0.35), 96), new THREE.MeshBasicMaterial({ color: new THREE.Color(...[[1, 0.9, 0.5], [1, 0.6, 0.2], [1, 0.3, 0.6], [0.7, 0.3, 1], [0.3, 0.6, 1]][k]).multiplyScalar(2.2 - k * 0.3), side: THREE.DoubleSide, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+            ring.rotation.x = Math.PI / 2; disk.add(ring);
+          }
+          group.add(disk);
+          spin.push((t) => { disk.rotation.y = t * 0.5; });
+          const halo = new THREE.Mesh(new THREE.TorusGeometry(rr * 1.05, rr * 0.04, 8, 64), new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 0.8, 0.5).multiplyScalar(2.5), fog: false }));
+          halo.position.copy(hole.position); group.add(halo); spin.push(() => halo.lookAt(halo.position.clone().add(new THREE.Vector3(0, 0, 1))));
+        } else {
+          const star = new THREE.Mesh(new THREE.IcosahedronGeometry(rr, 3), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.8, 1.1, 0.5), fog: false }));
+          star.position.set(...P(0, cy, 0)); group.add(star);
+          spin.push((t) => star.scale.setScalar(1 + Math.sin(t * 2) * 0.03));
+          for (let k = 0; k < 80; k++) { const a = rng() * Math.PI * 2, b2 = rng() * Math.PI - Math.PI / 2; const d = [Math.cos(a) * Math.cos(b2), Math.sin(b2), Math.sin(a) * Math.cos(b2)]; lights.flow(add(P(0, cy, 0), scale(d, rr)), add(P(0, cy, 0), scale(d, rr * 2.2)), [1, 0.6, 0.2], 200, 0.3 + rng() * 0.4, rng()); }
+        }
+        break;
+      }
+      case 'keep': case 'gatetower': {
+        if (L.kind === 'keep') {
+          const w = Math.min(R * 1.0, 6500), h = top - G + 4500;
+          geo.box(P(0, G + h / 2, 0), [w, h, w], 0, STONE_A);
+          for (let x = -w / 2; x <= w / 2; x += 400) for (const s of [-1, 1]) { geo.box(P(x, G + h + 120, s * w / 2), [220, 240, 220], 0, STONE_B); geo.box(P(s * w / 2, G + h + 120, x), [220, 240, 220], 0, STONE_B); }
+          for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) tower(geo, lights, P(sx * w / 2, G, sz * w / 2), h + 1500, Math.min(900, w * 0.14), rng, { r: [1, 0, 0], f: [0, 0, 1] }, 1);
+          for (let k = 0; k < 24; k++) { const side = k % 4, u = (rng() - 0.5) * w * 0.8, y = G + h * (0.3 + rng() * 0.6); const p = side === 0 ? P(u, y, -w / 2 - 6) : side === 1 ? P(u, y, w / 2 + 6) : side === 2 ? P(-w / 2 - 6, y, u) : P(w / 2 + 6, y, u); geo.box(p, side < 2 ? [140, 280, 14] : [14, 280, 140], 0, GLASS[k % GLASS.length], 0.95); }
+          lights.dot(P(0, G + h + 600, 0), [1, 0.5, 0.15], 500, 6, 0);
+        } else {
+          const d = Math.min(R * 0.5, 4000);
+          for (const s of [-1, 1]) tower(geo, lights, P(s * d, G, 0), top - G + 3000, Math.min(1100, R * 0.18), rng, { r: [1, 0, 0], f: [0, 0, 1] }, s);
+          for (let k = 0; k < 12; k++) { const a0 = (k / 12) * Math.PI, a1 = ((k + 1) / 12) * Math.PI; geo.cyl(P(-Math.cos(a0) * d, top + 800 + Math.sin(a0) * 1500, 0), P(-Math.cos(a1) * d, top + 800 + Math.sin(a1) * 1500, 0), 300, 300, 6, STONE_A); }
+        }
+        break;
+      }
+      default: break;
+    }
+  } finally { RIDE_OFF = false; }
 }

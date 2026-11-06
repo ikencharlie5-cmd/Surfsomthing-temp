@@ -114,6 +114,7 @@ export const STRUCTURES = {
   seacave: { wallColor: [0.35, 0.2, 0.3], ribColor: [0.3, 1.0, 0.9], blockColor: [0.9, 0.45, 0.55] },
   crystal: { wallColor: [0.2, 0.25, 0.4], ribColor: [0.5, 0.9, 1.0], blockColor: [0.45, 0.75, 1.0] },
   glowworm: { wallColor: [0.1, 0.12, 0.16], ribColor: [0.3, 0.8, 1.0], blockColor: [0.2, 0.25, 0.3] },
+  sandstone: { wallColor: [0.5, 0.25, 0.15], ribColor: [1.0, 0.6, 0.3], blockColor: [0.7, 0.4, 0.25] },
   warpgate: { wallColor: [0.15, 0.05, 0.25], ribColor: [1.0, 0.3, 0.9], blockColor: [0.4, 0.9, 1.0] },
 };
 
