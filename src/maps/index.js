@@ -4,7 +4,7 @@
 import tutorial from './tutorial.js';
 import lostTemple from './lost-temple.js';
 import theKeep from './the-keep.js';
-import { buildBanger, BANGERS } from './bangers.js';
+import { buildInteriorMap, INTERIORS } from './interiors.js';
 import { THEMES, themeById, generatedMap } from './themes.js';
 import { TIERS } from './generator.js';
 
@@ -25,7 +25,7 @@ const G = (theme, tier, id, name, description, twist, seed) => () => generatedMa
 const PACKS = {
   beach: [
     () => restyle(tutorial(), 'beach', 101),
-    () => buildBanger(BANGERS.beach),
+    () => buildInteriorMap(INTERIORS.beach),
     G('beach', 'hard', 'beach-riptide', 'Riptide', 'Rip currents drag you sideways: constant side switches and shifting gaps.', { label: 'Side switches', switchP: 0.65, sections: 1 }, 72374),
     G('beach', 'expert', 'beach-coral-crown', 'Coral Crown', 'Duck and dodge through a coral sea cave, then thread the reef arches.', { label: 'Sea cave', structure: { kind: 'seacave' }, needles: 1 }, 325783),
     G('beach', 'insane', 'beach-tsunami', 'Tsunami', 'Giant rolling wave ramps and sudden plunges.', { label: 'Giant waves', waveP: 0.6, waveAmp: 1.8, plungeP: 0.15 }, 903871),
@@ -33,7 +33,7 @@ const PACKS = {
   ],
   canyon: [
     G('canyon', 'easy', 'canyon-dust-devil', 'Dust Devil', 'Get caught in the whirlwind: a long corkscrew down the canyon.', { label: 'Spiral', spiral: 1 }, 41696),
-    () => buildBanger(BANGERS.canyon),
+    () => buildInteriorMap(INTERIORS.canyon),
     G('canyon', 'hard', 'canyon-mesa-mirage', 'Mesa Mirage', 'Rock gates to thread between towering mesas.', { label: 'Rock gates', needles: 2 }, 2103),
     G('canyon', 'expert', 'canyon-rattlesnake-pass', 'Rattlesnake Pass', 'A snaking pass: back-to-back side switches and wiggling ramps.', { label: 'Slalom', switchP: 0.7, waveP: 0.3, waveAmp: 1.3 }, 81294),
     G('canyon', 'insane', 'canyon-badlands', 'Badlands', 'Huge jumps across bottomless chasms.', { label: 'Long jumps', jumps: 2 }, 160485),
@@ -41,7 +41,7 @@ const PACKS = {
   ],
   cave: [
     G('cave', 'easy', 'cave-echo-hollow', 'Echo Hollow', 'Duck under stalactites and dodge stalagmites in a hollow cavern.', { label: 'Duck & dodge', dodge: 1 }, 3101),
-    () => buildBanger(BANGERS.cave),
+    () => buildInteriorMap(INTERIORS.cave),
     G('cave', 'hard', 'cave-glowworm-grotto', 'Glowworm Grotto', 'A grotto lit by glowworms, with narrow rock windows to thread.', { label: 'Glowworm grotto', structure: { kind: 'glowworm' }, needles: 1 }, 3103),
     G('cave', 'expert', 'cave-the-deep', 'The Deep', 'Plunge after plunge, deeper into the dark.', { label: 'Plunges', plungeP: 0.5 }, 3104),
     G('cave', 'insane', 'cave-abyssal-drop', 'Abyssal Drop', 'Leap across the abyss. Huge jumps, steep drops.', { label: 'Abyss jumps', jumps: 2, plungeP: 0.3 }, 280270),
@@ -49,7 +49,7 @@ const PACKS = {
   ],
   city: [
     G('city', 'easy', 'neon-drift', 'Neon Drift', 'Drift over flowing wave ramps between the towers.', { label: 'Wave ramps', waveP: 0.45 }, 4101),
-    () => buildBanger(BANGERS.city),
+    () => buildInteriorMap(INTERIORS.city),
     G('city', 'hard', 'city-rooftop-run', 'Rooftop Run', 'Leap from rooftop to rooftop across the avenues.', { label: 'Rooftop jumps', jumps: 2 }, 83293),
     G('city', 'expert', 'city-downtown-blitz', 'Downtown Blitz', 'Dodge billboards and signs bolted across the ramps.', { label: 'Duck & dodge', dodge: 2, needles: -2, forks: -2 }, 99132),
     G('city', 'insane', 'city-megacity', 'Megacity', 'Blast straight through the atriums of two megatowers.', { label: 'Megatower atriums', structure: { kind: 'atrium', count: 2 }, needles: -2, jumps: -1, forks: -2 }, 400055),
@@ -57,7 +57,7 @@ const PACKS = {
   ],
   station: [
     G('station', 'easy', 'station-docking-bay', 'Docking Bay', 'Fly through the docking hangar, dodging cargo.', { label: 'Hangar', structure: { kind: 'hangar' } }, 20939),
-    () => buildBanger(BANGERS.station),
+    () => buildInteriorMap(INTERIORS.station),
     G('station', 'hard', 'orbital', 'Orbital', 'Swing a full orbit around the station.', { label: 'Orbit spiral', spiral: 1 }, 100131),
     G('station', 'expert', 'station-zero-g', 'Zero-G', 'Gravity is almost gone: floaty, enormous jumps.', { label: 'Very low gravity', gravity: 420, jumps: 1 }, 36780),
     G('station', 'insane', 'station-event-horizon', 'Event Horizon', 'Spiral toward the black hole, threading the hatches.', { label: 'Gravity well spiral', spiral: 1, boost: 1, needles: -2, jumps: -1, forks: -2 }, 5105),
@@ -65,7 +65,7 @@ const PACKS = {
   ],
   servers: [
     G('servers', 'easy', 'night-tunnel', 'Night Tunnel', 'Duck the cable bundles strung across the shaft.', { label: 'Duck & dodge', dodge: 1 }, 29858),
-    () => buildBanger(BANGERS.servers),
+    () => buildInteriorMap(INTERIORS.servers),
     G('servers', 'hard', 'data-core', 'Data Core', 'Break into the core vault and dodge its server blocks.', { label: 'Core vault', structure: { kind: 'vault' } }, 61536),
     G('servers', 'expert', 'servers-firewall', 'Firewall', 'Thread the firewall at speed.', { label: 'Firewall slots', needles: 2 }, 45699),
     G('servers', 'insane', 'servers-kernel-panic', 'Kernel Panic', 'Everything glitches: side switches, blocks and boosts.', { label: 'Chaos', switchP: 0.7, dodge: 1, boost: 1 }, 552516),
@@ -81,7 +81,7 @@ const PACKS = {
   ],
   volcano: [
     G('volcano', 'easy', 'volcano-ash-fields', 'Ash Fields', 'Rolling waves of cooled ash.', { label: 'Ash waves', waveP: 0.4 }, 8101),
-    () => buildBanger(BANGERS.volcano),
+    () => buildInteriorMap(INTERIORS.volcano),
     G('volcano', 'hard', 'magma-run', 'Magma Run', 'Dive through a glowing lava tube.', { label: 'Lava tube', structure: { kind: 'lavatube' } }, 118969),
     G('volcano', 'expert', 'volcano-pyroclast', 'Pyroclast', 'Eruption boosts and huge jumps over rivers of fire.', { label: 'Eruption jumps', jumps: 2, boost: 1 }, 285269),
     G('volcano', 'insane', 'volcano-caldera', 'Caldera', 'Plunge down into the caldera.', { label: 'Caldera plunges', plungeP: 0.45, jumps: 1, needles: -1 }, 142728),
@@ -89,7 +89,7 @@ const PACKS = {
   ],
   vortex: [
     G('vortex', 'easy', 'vortex-warp-lane', 'Warp Lane', 'Boost rings light the way through the warp.', { label: 'Boost rings', boost: 3 }, 17020),
-    () => buildBanger(BANGERS.vortex),
+    () => buildInteriorMap(INTERIORS.vortex),
     G('vortex', 'hard', 'vortex-lightspeed', 'Lightspeed', 'Boost to lightspeed, then make the long warp jumps.', { label: 'Boost jumps', boost: 2, jumps: 1 }, 48698),
     G('vortex', 'expert', 'final-overdrive', 'Final Overdrive', 'Overdrive through a warp gate corridor, boosts all the way.', { label: 'Warp gate', structure: { kind: 'warpgate' }, boost: 2 }, 1054412),
     G('vortex', 'insane', 'vortex-singularity', 'Singularity', 'Spiral into the singularity through tightening gates.', { label: 'Death spiral', spiral: 1, needles: -3, jumps: -2, forks: -2, boost: 1 }, 2266020),

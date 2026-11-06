@@ -396,7 +396,7 @@ export class Course {
   structure(kind, pattern, opts = {}) {
     const prev = this.opts.tunnel;
     const t = { side: opts.side ?? 300, top: opts.top ?? 560, bottom: opts.bottom ?? 520, ceiling: true, hidden: false, color: opts.wallColor || [0.5, 0.45, 0.35], ribColor: opts.ribColor || [1.0, 0.6, 0.25], ribSpacing: 700, structure: kind };
-    if (prev && prev.interior) Object.assign(t, { side: prev.side, top: prev.top, bottom: prev.bottom, color: prev.color, interior: prev.interior });
+    if (prev && prev.interior) Object.assign(t, { side: prev.side, top: prev.top, bottom: prev.bottom, color: prev.color, interior: prev.interior, wallKind: prev.wallKind });
     this.opts.tunnel = t;
     if (this.line.length) this.line[this.line.length - 1].tunnel = { ...t };
     const from = this.line.length - 1;
@@ -568,7 +568,7 @@ function addEnclosure(m, line) {
   };
   const pt = (s, lat, y) => [s.p[0] + s.rx * lat, y, s.p[2] + s.rz * lat];
   const thick = 60;
-  const look = (t) => ({ kind: t.interior ? 'stone' : 'wall', color: t.color || COLORS.purple, edge: t.interior ? 0.15 : 0.45, hidden: !!t.hidden });
+  const look = (t) => ({ kind: t.interior ? (t.wallKind || 'stone') : 'wall', color: t.color || COLORS.purple, edge: t.interior ? 0.15 : 0.45, hidden: !!t.hidden });
   /** A solid block in the plane of section s: lat l0..l1, height y0..y1. */
   const plate = (s, l0, l1, y0, y1, meta) => {
     const [fx, fz] = fwdOf(s.h);
@@ -620,14 +620,14 @@ function addEnclosure(m, line) {
           pts.push(pt(s, side * lat, s.yb), pt(s, side * lat, s.yt + (t.ceiling ? thick : 0)));
         }
       }
-      m.brushes.push({ points: pts, kind: t.interior ? 'stone' : 'wall', color, edge: t.interior ? 0.15 : t.structure ? 0.7 : 0.45, hidden: !!t.hidden });
+      m.brushes.push({ points: pts, kind: t.interior ? (t.wallKind || 'stone') : 'wall', color, edge: t.interior ? 0.15 : t.structure ? 0.7 : 0.45, hidden: !!t.hidden });
     }
     if (t.ceiling) {
       const pts = [];
       for (const s of [a, b]) {
         for (const lat of [-(s.L + thick), s.L + thick]) pts.push(pt(s, lat, s.yt), pt(s, lat, s.yt + thick));
       }
-      m.brushes.push({ points: pts, kind: t.interior ? 'stone' : 'wall', color, edge: t.interior ? 0.15 : 0.45, hidden: !!t.hidden });
+      m.brushes.push({ points: pts, kind: t.interior ? (t.wallKind || 'stone') : 'wall', color, edge: t.interior ? 0.15 : 0.45, hidden: !!t.hidden });
     }
     if (t.hidden || t.interior) continue; // themed scenery replaces ribs
     // ribs: glowing frames along the enclosure

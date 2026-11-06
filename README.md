@@ -92,24 +92,26 @@ Start with **First Wave**, the tutorial map. It shows hints at each stage.
   kickers, the flooded chamber, and a final sprint around the idol in the
   great hall.
 
-  **Banger maps:** each theme's medium slot is a hand-built set piece in the
-  Lost Temple style (`src/maps/bangers.js`). You race around a giant landmark
-  on the inside face, with gates, boost rings and two double-needle kickers,
-  then a duck & dodge run through a building and a finale lap around a second
-  landmark. Each takes about 70-85 s at 2500-3000 u/s.
+  **Inside-the-landmark maps:** each theme's medium slot is ridden INSIDE a
+  giant landmark (`src/maps/interiors.js`, `src/maps/the-keep.js`; jungle keeps
+  the Lost Temple). Every room is a closed, solid enclosure (walls, ceiling,
+  floor; touching the floor is a fall) and the ramps are built into the floor.
+  You drop into a tower shaft, corkscrew down it, burst into a great hall,
+  slalom its doorways, kick across it through double doorways, duck & dodge
+  through a cellar and break out of the exit gate. Each takes about 55-70 s.
 
-  | Theme | Banger | Landmarks |
+  | Theme | Map | Inside |
   | --- | --- | --- |
-  | Beach | Lighthouse Point | neon lighthouse with a sweeping beam, sea stacks |
-  | Canyon | Spire Valley | towering red-rock spire, giant natural arch |
-  | Cave | Crystal Heart | colossal glowing crystal clusters |
-  | City | Spire Tower | two setback megatowers |
-  | Space Station | Reactor Core | blazing reactor cores with spinning rings |
-  | Server Farm | Mainframe | LED mainframe towers streaming data |
+  | Beach | Lighthouse Point | the lighthouse tower, keeper's hall, sea cellar |
+  | Canyon | Spire Valley | caverns carved through the red-rock spire |
+  | Cave | Crystal Heart | the glowing crystal geode |
+  | City | Spire Tower | the megatower's elevator shaft and neon atrium |
+  | Space Station | Reactor Core | reactor access shaft and core chamber |
+  | Server Farm | Mainframe | cooling shaft and server halls |
   | Jungle | Lost Temple | pyramid, temple chambers, idol |
-  | Volcano | Inferno | erupting volcano, falling river of lava |
-  | Warp | Event Zero | black hole with accretion disk, a star |
-  | Castle | The Keep | great keep, gate towers |
+  | Volcano | Inferno | lava tubes over a molten floor |
+  | Warp | Event Zero | energy corridors of the warp gate |
+  | Castle | The Keep | the keep's tower, great hall and crypt |
 
   **Kickers on every map:** easy 1, medium/hard 2, expert/insane 3,
   extreme 6. Harder tiers use more double needles.

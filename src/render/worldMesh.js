@@ -5,7 +5,7 @@ import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { SUN_DIR, FOG_COLOR, FOG_NEAR, FOG_FAR } from './renderer.js';
 
-const KIND = { surf: 0, floor: 1, wall: 2, building: 3, stone: 4 };
+const KIND = { surf: 0, floor: 1, wall: 2, building: 3, stone: 4, panel: 5, rock: 6, glow: 7 };
 
 let sharedFaceMat = null;
 const lineMats = new Set();
@@ -55,7 +55,7 @@ export function buildBrushMesh(brushes) {
           pos.push(p.x, p.y, p.z);
           nrm.push(f.n.x, f.n.y, f.n.z);
           col.push(c[0], c[1], c[2]);
-          kind.push(k === 4 ? 4 : k === 3 ? (f.n.y > 0.7 ? 1 : 3) : k === 2 ? 2 : k === 1 && fk === 0 ? 0 : fk);
+          kind.push(k >= 4 ? k : k === 3 ? (f.n.y > 0.7 ? 1 : 3) : k === 2 ? 2 : k === 1 && fk === 0 ? 0 : fk);
         }
       }
     }
@@ -297,6 +297,20 @@ void main() {
     // platforms: dark glass with bright grid
     vec3 base = vec3(0.02, 0.015, 0.06) + vColor * 0.04;
     c = base + vColor * (g * 0.5 * gf + g2 * 0.6);
+  } else if (vKind > 6.5) {
+    // glowing crystal / glass
+    float sh = 0.5 + 0.5 * sin((vWorld.x + vWorld.z) * 0.004 + vWorld.y * 0.003 + uTime * 0.6);
+    c = vColor * (0.18 + 0.22 * ndl + 0.15 * sh) + vColor * fres * 0.9 + vColor * g2 * 0.25;
+  } else if (vKind > 5.5) {
+    // raw rock: blotchy, lit, no grid
+    float n1 = fract(sin(dot(floor(vWorld.xz / 380.0) + floor(vWorld.y / 300.0), vec2(12.9898, 78.233))) * 43758.5453);
+    float n2 = 0.5 + 0.5 * sin(vWorld.x * 0.002 + vWorld.y * 0.003) * sin(vWorld.z * 0.0025 - vWorld.y * 0.002);
+    c = vColor * (0.55 + 0.25 * n1 + 0.4 * n2) * (0.35 + 0.8 * ndl) * (0.6 + 0.5 * hemi);
+  } else if (vKind > 4.5) {
+    // metal panels with seams and rivets of light
+    vec2 pf = fract(uv / 420.0);
+    float seam = 1.0 - step(0.03, pf.x) * step(0.03, pf.y) * step(pf.x, 0.97) * step(pf.y, 0.97);
+    c = vColor * (0.4 + 0.7 * ndl) * (0.7 + 0.4 * hemi) * (1.0 - seam * 0.6 * gf) + vColor * fres * 0.25;
   } else if (vKind > 3.5) {
     // stone ramps built into a structure: lit masonry blocks
     vec2 bp = uv / vec2(260.0, 130.0);
