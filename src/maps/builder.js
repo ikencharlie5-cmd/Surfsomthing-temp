@@ -396,6 +396,7 @@ export class Course {
   structure(kind, pattern, opts = {}) {
     const prev = this.opts.tunnel;
     const t = { side: opts.side ?? 300, top: opts.top ?? 560, bottom: opts.bottom ?? 520, ceiling: true, hidden: false, color: opts.wallColor || [0.5, 0.45, 0.35], ribColor: opts.ribColor || [1.0, 0.6, 0.25], ribSpacing: 700, structure: kind };
+    if (prev && prev.interior) Object.assign(t, { side: prev.side, top: prev.top, bottom: prev.bottom, color: prev.color, interior: prev.interior });
     this.opts.tunnel = t;
     if (this.line.length) this.line[this.line.length - 1].tunnel = { ...t };
     const from = this.line.length - 1;
@@ -566,12 +567,52 @@ function addEnclosure(m, line) {
     return { rx, rz, L, yb, yt, p: e.p };
   };
   const pt = (s, lat, y) => [s.p[0] + s.rx * lat, y, s.p[2] + s.rz * lat];
+  const thick = 60;
+  const look = (t) => ({ kind: t.interior ? 'stone' : 'wall', color: t.color || COLORS.purple, edge: t.interior ? 0.15 : 0.45, hidden: !!t.hidden });
+  /** A solid block in the plane of section s: lat l0..l1, height y0..y1. */
+  const plate = (s, l0, l1, y0, y1, meta) => {
+    const [fx, fz] = fwdOf(s.h);
+    const pts = [];
+    for (const d of [-thick, thick]) for (const l of [l0, l1]) for (const y of [y0, y1]) pts.push([s.p[0] + s.rx * l + fx * d, y, s.p[2] + s.rz * l + fz * d]);
+    m.brushes.push({ points: pts, ...meta });
+  };
+  const secH = (e, t) => ({ ...sec(e, t), h: e.h });
+  // interior spaces are closed boxes: no holes anywhere
+  for (let i = 0; i < line.length; i++) {
+    const t0 = i > 0 ? line[i - 1].tunnel : null, t1 = i < line.length - 1 ? line[i].tunnel : null;
+    if (i === 0 && t1 && t1.interior) {
+      // back wall behind the spawn platform, joined to the side walls
+      const [fx, fz] = fwdOf(line[0].h);
+      const e0 = { ...line[0], p: [line[0].p[0] - fx * 650, line[0].p[1], line[0].p[2] - fz * 650] };
+      const a = sec(e0, t1), b = sec(line[0], t1);
+      for (const side of [-1, 1]) {
+        const pts = [];
+        for (const s of [a, b]) for (const lat of [s.L, s.L + thick]) pts.push(pt(s, side * lat, s.yb), pt(s, side * lat, s.yt + thick));
+        m.brushes.push({ points: pts, ...look(t1) });
+      }
+      const pts = [];
+      for (const s of [a, b]) for (const lat of [-(a.L + thick), a.L + thick]) pts.push(pt(s, lat, s.yt), pt(s, lat, s.yt + thick));
+      m.brushes.push({ points: pts, ...look(t1) });
+      plate({ ...a, h: line[0].h }, -(a.L + thick), a.L + thick, a.yb, a.yt + thick, look(t1));
+    }
+    if (t0 && t1 && t0.interior && t1.interior && (t0.side !== t1.side || t0.top !== t1.top || t0.bottom !== t1.bottom)) {
+      // where a narrow room opens into a bigger one, wall off the step between them
+      const s0 = secH(line[i], t0), s1 = secH(line[i], t1);
+      const big = s0.L >= s1.L ? s0 : s1, small = big === s0 ? s1 : s0;
+      const bigT = big === s0 ? t0 : t1;
+      const oL = big.L + thick, oB = Math.min(s0.yb, s1.yb), oT = Math.max(s0.yt, s1.yt) + thick;
+      const iL = small.L, iB = Math.max(s0.yb, s1.yb), iT = Math.min(s0.yt, s1.yt);
+      plate(big, -oL, -iL, oB, oT, look(bigT));
+      plate(big, iL, oL, oB, oT, look(bigT));
+      if (oT > iT) plate(big, -iL, iL, iT, oT, look(bigT));
+      if (iB > oB) plate(big, -iL, iL, oB, iB, look(bigT));
+    }
+  }
   for (let i = 0; i < line.length - 1; i++) {
     const t = line[i].tunnel;
     if (!t) continue;
     const a = sec(line[i], t), b = sec(line[i + 1], t);
     const color = t.color || COLORS.purple;
-    const thick = 60;
     for (const side of [-1, 1]) {
       const pts = [];
       for (const s of [a, b]) {

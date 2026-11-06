@@ -1948,6 +1948,7 @@ function buildSetPiecesInner(map, quality) {
   const density = DENSITY[quality] ?? 1;
 
   for (const st of structures) {
+    if (map.line[st.from + 1]?.tunnel?.interior) continue; // inside a building already: no outer shell
     const A = map.line[st.from], Z = map.line[st.to];
     const look = SET_LOOK[st.kind] || SET_LOOK.temple;
     const t = A.tunnel || Z.tunnel || map.line[st.from + 1].tunnel;
@@ -2716,20 +2717,24 @@ function buildInterior(map, t, density) {
       const Lw = e.width + tn.side;
       const at2 = (s, lat, dy) => { const u = s / len; return [e.p[0] + dx * u + R[0] * lat, e.p[1] + (f.p[1] - e.p[1]) * u + dy, e.p[2] + dz * u + R[2] * lat]; };
       const floorY = -e.height - (tn.bottom ?? 600), ceilY = tn.top ?? 750;
+      // corners built from each point's own section (same as the walls) so curves leave no gaps
+      const rv = (pt) => [Math.cos((pt.h * Math.PI) / 180), 0, -Math.sin((pt.h * Math.PI) / 180)];
+      const cor = (pt, lat, dy) => { const r = rv(pt); return [pt.p[0] + r[0] * lat, pt.p[1] + dy, pt.p[2] + r[2] * lat]; };
+      const Lf = f.width + tn.side, fFloor = -f.height - (tn.bottom ?? 600);
       // stone footing: the ramp's base edges run down into the floor
       if (map.engrained && !f.gap) {
         const fc = [0.42, 0.4, 0.37];
         for (const side of [-1, 1]) {
-          const a0 = at2(0, side * e.width, -e.height), a1 = at2(len, side * e.width, -f.height);
-          const b0 = at2(0, side * (e.width + 120), floorY + 2), b1 = at2(len, side * (e.width + 120), floorY + 2);
+          const a0 = cor(e, side * e.width, -e.height), a1 = cor(f, side * f.width, -f.height);
+          const b0 = cor(e, side * (e.width + 120), floorY + 2), b1 = cor(f, side * (f.width + 120), fFloor + 2);
           geo.quad(a0, a1, b1, b0, fc);
         }
       }
-      // floor (decorative: you never ride down there)
-      geo.quad(at2(0, -Lw, floorY), at2(len, -Lw, floorY), at2(len, Lw, floorY), at2(0, Lw, floorY), tn.interior === 'crypt' ? [0.12, 0.11, 0.13] : [0.2, 0.16, 0.14]);
+      // floor (you never ride down there: touching it is a fall)
+      geo.quad(cor(e, -Lw, floorY), cor(f, -Lf, fFloor), cor(f, Lf, fFloor), cor(e, Lw, floorY), map.look?.floor || (tn.interior === 'crypt' ? [0.12, 0.11, 0.13] : [0.2, 0.16, 0.14]));
       if (tn.interior === 'hall') {
         // red carpet runner and banners, stained glass, chandeliers
-        geo.quad(at2(0, -Lw * 0.25, floorY + 6), at2(len, -Lw * 0.25, floorY + 6), at2(len, Lw * 0.25, floorY + 6), at2(0, Lw * 0.25, floorY + 6), [0.4, 0.04, 0.06]);
+        geo.quad(cor(e, -Lw * 0.25, floorY + 6), cor(f, -Lf * 0.25, fFloor + 6), cor(f, Lf * 0.25, fFloor + 6), cor(e, Lw * 0.25, floorY + 6), map.look?.carpet || [0.4, 0.04, 0.06]);
         for (let s = 300; s < len; s += 900) {
           for (const side of [-1, 1]) {
             const wl = side * (Lw - 20);
