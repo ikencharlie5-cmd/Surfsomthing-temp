@@ -101,7 +101,7 @@ Start with **First Wave**, the tutorial map. It shows hints at each stage.
 
   | Theme | Map | Route |
   | --- | --- | --- |
-  | Beach | Lighthouse Point | spiral round a striped lighthouse, in through the wall, corkscrew round the lamp, out over the sea |
+  | Beach | Lighthouse Point | round a striped lighthouse, figure eight through a sea stack, back under yourself, in through the wall, corkscrew round the lamp, out over the sea |
   | Canyon | Spire Valley | figure eight round twin rock spires, tunnelling through each |
   | Cave | Crystal Heart | into a hollow glowing geode, two laps round the crystal heart, back out |
   | City | Spire Tower | three loops that punch straight through the megatower, lower each time |

@@ -57,6 +57,24 @@ class Orbit {
     this.c.straight(1600, 380).kicker({ rise: 390, gapLen: 2550, landDrop: 680, landLen: 7200, landSlope: 0.07, needles: dbl, ramp: { color: this.col() } });
     return this;
   }
+  /** keep circling until a flip() onto radius R would circle centre T */
+  closeOn(T, R) {
+    const c = this.c, C = this.C, sg = this.sgn;
+    const lat = (sg < 0 ? -1 : 1) * W * 0.9; // flip()'s sideways shift
+    let best = 0, bestD = Infinity;
+    for (let k = 0; k < 360; k += 0.25) {
+      const h = c.h - sg * k;
+      const [qx, qz] = rightOf(h);
+      const p = [C[0] - sg * qx * this.R, C[1] - sg * qz * this.R];
+      const f = [-Math.sin(h * D2R), -Math.cos(h * D2R)];
+      const L = [p[0] + f[0] * 950 + qx * lat, p[1] + f[1] * 950 + qz * lat];
+      const cc = [L[0] - sg * qx * R, L[1] - sg * qz * R];
+      const d = Math.hypot(cc[0] - T[0], cc[1] - T[1]);
+      if (d < bestD) { bestD = d; best = k; }
+    }
+    if (best > 2) this.orbit(best);
+    return this;
+  }
   /** keep circling until heading straight at a point (x, z) */
   aimAt(T) {
     const c = this.c;
@@ -164,13 +182,18 @@ export const WEAVES = {
   beach: {
     theme: 'beach', id: 'beach-lighthouse-point', name: 'Lighthouse Point', seed: 1202, landmark: 'lighthouse',
     twist: 'Through the lighthouse',
-    description: 'Spiral round a colossal lighthouse, crash in through its wall, corkscrew round the lamp inside and burst out over the sea.',
+    description: 'Cut straight through a colossal lighthouse, figure-eight through a sea stack, then corkscrew round the lamp inside and burst out over the sea.',
     accents: [[1, 0.4, 0.6], [0.3, 1, 0.9], [1, 0.8, 0.3]], gateColor: [1.0, 0.5, 0.8],
     route: (o) => {
       o.ring(9500, 1).shell({ kind: 'tower', r: 6400, look: 'lighthouse', above: 13000, taper: 0.2 });
-      o.orbit(110).gap('g').orbit(120).gap('b').orbit(140);
-      o.transfer(4600).orbit(150).gap('g').orbit(170).gap('b').orbit(110);
-      o.transfer(9500).orbit(40).kick();
+      o.orbit(70).gap('b').orbit(60);
+      // over to the sea stack: switch faces, loop round it and tunnel through it
+      const T = [...o.C];
+      o.flip(8000).shell({ kind: 'rock', r: 3300, look: 'seastack', above: 2500, taper: 0.25 });
+      o.orbit(40).dip(1800).gap('b').closeOn(T, 9500);
+      // back to the lighthouse: in through the wall and round the lamp
+      o.flip(9500).orbit(30).transfer(4600).orbit(100).gap('b').orbit(70);
+      o.transfer(9500).orbit(35).kick();
     },
     post: (b, ground) => { b.map.env.floorAbs = ground + 900; b.map.theme.seaY = ground + 900; },
   },

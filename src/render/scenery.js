@@ -2413,6 +2413,10 @@ const SHELL_LOOK = {
   spire: {
     out: (p) => strataColor(p), in: (p) => scale(strataColor(p), 0.5), edge: [1.7, 0.8, 0.3], light: [1, 0.6, 0.3], bulge: 0.12, cap: 'rock',
   },
+  seastack: {
+    out: (p) => mix([0.3, 0.17, 0.26], [0.5, 0.3, 0.36], fbm3(p[0] / 700, p[1] / 500, p[2] / 700, 3)), in: () => [0.12, 0.08, 0.12],
+    edge: [0.4, 1.6, 1.7], light: [0.3, 1, 0.9], bulge: 0.14, cap: 'rock',
+  },
   geode: {
     out: (p) => mix([0.16, 0.15, 0.19], [0.32, 0.3, 0.36], fbm3(p[0] / 2500, p[1] / 2500, p[2] / 2500, 3)),
     in: (p) => mix([0.25, 0.55, 1.0], [0.75, 0.4, 1.0], fbm3(p[0] / 1800, p[1] / 1800, p[2] / 1800, 3)), inGlow: 0.55,
@@ -2616,15 +2620,8 @@ function shellInside(geo, lights, s, L, rng) {
     lights.dot([cx, s.cy, cz], [0.5, 0.9, 1], 2500, 0, 0);
   }
   if (s.look === 'lighthouse') {
-    // the lamp column and a spiral stair round the inner wall
+    // the lamp column
     geo.cyl([cx, s.yb, cz], [cx, s.yt, cz], 1500, 1200, 12, [0.85, 0.82, 0.78]);
-    let prev = null;
-    for (let k = 0; k <= 160; k++) {
-      const a = k * 0.25, y = s.yb + (s.yt - s.yb) * (k / 160);
-      const p = [cx + Math.cos(a) * (s.r - 150), y, cz + Math.sin(a) * (s.r - 150)];
-      if (prev) geo.line(prev, p, [1.6, 0.9, 0.5]);
-      prev = p;
-    }
   }
   if (s.look === 'skyscraper') {
     // floor slabs edge-lit round the atrium
