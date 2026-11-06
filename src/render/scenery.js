@@ -2716,6 +2716,15 @@ function buildInterior(map, t, density) {
       const Lw = e.width + tn.side;
       const at2 = (s, lat, dy) => { const u = s / len; return [e.p[0] + dx * u + R[0] * lat, e.p[1] + (f.p[1] - e.p[1]) * u + dy, e.p[2] + dz * u + R[2] * lat]; };
       const floorY = -e.height - (tn.bottom ?? 600), ceilY = tn.top ?? 750;
+      // stone footing: the ramp's base edges run down into the floor
+      if (map.engrained && !f.gap) {
+        const fc = [0.42, 0.4, 0.37];
+        for (const side of [-1, 1]) {
+          const a0 = at2(0, side * e.width, -e.height), a1 = at2(len, side * e.width, -f.height);
+          const b0 = at2(0, side * (e.width + 120), floorY + 2), b1 = at2(len, side * (e.width + 120), floorY + 2);
+          geo.quad(a0, a1, b1, b0, fc);
+        }
+      }
       // floor (decorative: you never ride down there)
       geo.quad(at2(0, -Lw, floorY), at2(len, -Lw, floorY), at2(len, Lw, floorY), at2(0, Lw, floorY), tn.interior === 'crypt' ? [0.12, 0.11, 0.13] : [0.2, 0.16, 0.14]);
       if (tn.interior === 'hall') {

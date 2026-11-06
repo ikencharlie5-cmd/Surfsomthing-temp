@@ -579,14 +579,14 @@ function addEnclosure(m, line) {
           pts.push(pt(s, side * lat, s.yb), pt(s, side * lat, s.yt + (t.ceiling ? thick : 0)));
         }
       }
-      m.brushes.push({ points: pts, kind: t.interior ? 'floor' : 'wall', color, edge: t.interior ? 0.25 : t.structure ? 0.7 : 0.45, hidden: !!t.hidden });
+      m.brushes.push({ points: pts, kind: t.interior ? 'stone' : 'wall', color, edge: t.interior ? 0.15 : t.structure ? 0.7 : 0.45, hidden: !!t.hidden });
     }
     if (t.ceiling) {
       const pts = [];
       for (const s of [a, b]) {
         for (const lat of [-(s.L + thick), s.L + thick]) pts.push(pt(s, lat, s.yt), pt(s, lat, s.yt + thick));
       }
-      m.brushes.push({ points: pts, kind: t.interior ? 'floor' : 'wall', color, edge: t.interior ? 0.25 : 0.45, hidden: !!t.hidden });
+      m.brushes.push({ points: pts, kind: t.interior ? 'stone' : 'wall', color, edge: t.interior ? 0.15 : 0.45, hidden: !!t.hidden });
     }
     if (t.hidden || t.interior) continue; // themed scenery replaces ribs
     // ribs: glowing frames along the enclosure

@@ -20,9 +20,9 @@ export default function build() {
   });
   const W = 250;
   // interior spaces (all solid, all visible)
-  const shaft = { side: 260, top: 900, bottom: 600, ceiling: true, color: STONE, interior: 'shaft' };
-  const hall = { side: 1300, top: 2600, bottom: 900, ceiling: true, color: STONE, interior: 'hall' };
-  const crypt = { side: 280, top: 560, bottom: 520, ceiling: true, color: [0.3, 0.3, 0.34], interior: 'crypt' };
+  const shaft = { side: 260, top: 900, bottom: 140, ceiling: true, color: STONE, interior: 'shaft' };
+  const hall = { side: 1300, top: 2600, bottom: 140, ceiling: true, color: STONE, interior: 'hall' };
+  const crypt = { side: 280, top: 560, bottom: 140, ceiling: true, color: [0.3, 0.3, 0.34], interior: 'crypt' };
   const door = (size, at = 0.5, lintel = 700) => ({ size, at, lintel, color: STONE, edge: 0.5, castle: true });
   const dbl = (size) => [door(size, 0.3, 900), door(size, 0.66, 900)];
   const L = (o = {}) => ({ face: 'left', ...o });
@@ -53,7 +53,7 @@ export default function build() {
       .curve(-120, 5200, 600)
       // --- down the stairs into the crypt: duck & dodge
       .gap(1000, W * 0.9, L({ color: TORCH, tunnel: crypt })).straight(2200, 180)
-      .structure('hall', ['dodge', 'dodge', 'duck', 'duck'], { slope: 0.08, spacing: 3000, approach: 2600, side: 280, top: 560, bottom: 520 })
+      .structure('hall', ['dodge', 'dodge', 'duck', 'duck'], { slope: 0.08, spacing: 3000, approach: 2600, side: 280, top: 560, bottom: 140 })
       .straight(2000, 200)
       // --- back up into the hall for one more kicker, then out the main gate
       .gap(1000, 0, { color: MOON, tunnel: hall }).straight(1500, 380)
@@ -63,5 +63,9 @@ export default function build() {
       .straight(2500, 200),
   });
   b.map.twist = 'Inside the keep';
+  // the ramps are stone, built into the castle floor; touching the floor is a fall
+  for (const br of b.map.brushes) if (br.kind === 'surf') { br.kind = 'stone'; br.color = [0.55, 0.52, 0.48]; br.edge = 0.3; }
+  b.map.groundDrop = 120;
+  b.map.engrained = true;
   return b.build();
 }

@@ -5,7 +5,7 @@ import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { SUN_DIR, FOG_COLOR, FOG_NEAR, FOG_FAR } from './renderer.js';
 
-const KIND = { surf: 0, floor: 1, wall: 2, building: 3 };
+const KIND = { surf: 0, floor: 1, wall: 2, building: 3, stone: 4 };
 
 let sharedFaceMat = null;
 const lineMats = new Set();
@@ -55,7 +55,7 @@ export function buildBrushMesh(brushes) {
           pos.push(p.x, p.y, p.z);
           nrm.push(f.n.x, f.n.y, f.n.z);
           col.push(c[0], c[1], c[2]);
-          kind.push(k === 3 ? (f.n.y > 0.7 ? 1 : 3) : k === 2 ? 2 : k === 1 && fk === 0 ? 0 : fk);
+          kind.push(k === 4 ? 4 : k === 3 ? (f.n.y > 0.7 ? 1 : 3) : k === 2 ? 2 : k === 1 && fk === 0 ? 0 : fk);
         }
       }
     }
@@ -297,6 +297,15 @@ void main() {
     // platforms: dark glass with bright grid
     vec3 base = vec3(0.02, 0.015, 0.06) + vColor * 0.04;
     c = base + vColor * (g * 0.5 * gf + g2 * 0.6);
+  } else if (vKind > 3.5) {
+    // stone ramps built into a structure: lit masonry blocks
+    vec2 bp = uv / vec2(260.0, 130.0);
+    bp.x += floor(bp.y) * 0.5;
+    vec2 bf = fract(bp);
+    float mortar = 1.0 - step(0.06, bf.x) * step(0.08, bf.y);
+    float var = fract(sin(dot(floor(bp), vec2(12.9898, 78.233))) * 43758.5453);
+    vec3 st = vColor * (0.75 + 0.35 * var) * (0.35 + 0.75 * ndl) * (0.6 + 0.5 * hemi);
+    c = mix(st, st * 0.35, mortar * gf) + vColor * fres * 0.08;
   } else if (vKind > 2.5) {
     // buildings: dark facades with a grid of lit windows
     vec2 cell = floor(uv / vec2(90.0, 120.0));
